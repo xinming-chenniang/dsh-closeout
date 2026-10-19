@@ -1,0 +1,44 @@
+{
+  "name": "dsh-closeout",
+  "version": "0.1.0",
+  "description": "Pre-close checks for an AI coding session: uncommitted git work, files still only on disk, and a short written wrap-up — before you archive or delete the conversation.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "ai-agent",
+    "coding-agent",
+    "git",
+    "session",
+    "closeout",
+    "handoff",
+    "cli"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "./bin/closeout.mjs",
+  "bin": {
+    "closeout": "./bin/closeout.mjs"
+  },
+  "files": [
+    "bin",
+    "skills",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "demo": "node bin/closeout.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/284022719/dsh-closeout.git"
+  },
+  "homepage": "https://github.com/284022719/dsh-closeout#readme",
+  "bugs": {
+    "url": "https://github.com/284022719/dsh-closeout/issues"
+  }
+}
