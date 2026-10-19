@@ -24,6 +24,7 @@
  */
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { realpathSync } from 'node:fs'
 import { collect, conclude } from '../lib/checks.mjs'
 import { TEXT, render } from '../lib/render.mjs'
 import { buildHandoff, safeName, writeHandoff } from '../lib/handoff.mjs'
@@ -135,8 +136,8 @@ function main(argv) {
     session: r.session,
     sessionInfo: r.sessionInfo,
     handoff: { needed: r.handoff.needed, reasons: r.handoff.reasons, exists: r.handoff.exists, dir: r.handoff.dir },
-    must: r.must.map((m) => m.text),
-    glance: r.glance.map((m) => m.text),
+    must: r.must.map((m) => ({ text: m.text, next: m.next ?? null })),
+    glance: r.glance.map((m) => ({ text: m.text, next: m.next ?? null })),
     fine: r.fine.map((m) => m.text),
     skipped: r.skipped.map((m) => m.text),
   }
@@ -164,5 +165,21 @@ function main(argv) {
 }
 
 // 只在「被直接执行」时跑 main；被测试 import 时不跑（否则 --test 会把进程参数当 CLI 参数）。
-const invokedDirectly = process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))
+//
+// 判据不能用路径字符串相等：`npm link` 在全局目录建的是 **junction**，Node 会把
+// `import.meta.url` 解析成真实路径，而 `process.argv[1]` 仍是 junction 路径 —— 两者不相等，
+// main 就整个被跳过，于是「退出码 0 + 空输出」。那正是本工具最该避免的静默失败，实测踩过。
+// 所以两边都先做 realpath 归一，再比。
+function realOf(p) {
+  try {
+    return realpathSync.native(p)
+  } catch {
+    try {
+      return realpathSync(p)
+    } catch {
+      return resolve(p)
+    }
+  }
+}
+const invokedDirectly = process.argv[1] !== undefined && realOf(process.argv[1]) === realOf(fileURLToPath(import.meta.url))
 if (invokedDirectly) main(process.argv.slice(2))

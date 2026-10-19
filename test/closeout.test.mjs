@@ -10,7 +10,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync, symlinkSync, rmdirSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -254,6 +254,34 @@ test('CLI 直接跑：退出码 0，--json 是合法 JSON 且含结论字段', (
   assert.ok(['no-delete', 'write-handoff', 'safe'].includes(j.verdict), `verdict 取值意外：${j.verdict}`)
   assert.equal(typeof j.verdictText, 'string')
   assert.ok(Array.isArray(j.must) && Array.isArray(j.skipped))
+})
+
+test('CLI 通过 junction / symlink 调用也能跑（invokedDirectly 不能用路径字符串比较）', () => {
+  const here = fileURLToPath(new URL('..', import.meta.url))
+  const dir = mkdtempSync(join(tmpdir(), 'closeout-junction-'))
+  const link = join(dir, 'pkg')
+  try {
+    symlinkSync(here, link, 'junction')
+    let out = ''
+    try {
+      out = execFileSync(process.execPath, [join(link, 'bin', 'closeout.mjs'), '--json'], { encoding: 'utf8' })
+    } catch (e) {
+      out = e && e.stdout ? String(e.stdout) : ''
+    }
+    assert.ok(out.trim().startsWith('{'), '通过 junction 调用必须有输出；空输出 + 退出码 0 就是那个静默失败')
+    JSON.parse(out)
+  } finally {
+    // junction 只删链接本身：先 rmdir 链接，再删临时目录，最后确认源目录还在
+    if (existsSync(link)) {
+      try {
+        rmdirSync(link)
+      } catch {
+        // 试探式清理：不阻断测试，但下面会断言源目录仍在
+      }
+    }
+    rmSync(dir, { recursive: true, force: true })
+    assert.equal(existsSync(join(here, 'bin', 'closeout.mjs')), true, '清理 junction 时不能误删源目录')
+  }
 })
 
 test('CLI --strict：有必须处理项时退出码 1', () => {
