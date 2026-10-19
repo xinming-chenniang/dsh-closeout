@@ -41,6 +41,18 @@ Things that actually happened in my own sessions:
 The first three are disk facts, so they became a command. The fourth isn't — but the tool can still tell you
 *this session is long enough to deserve a handoff note*, and generate its skeleton.
 
+## Compared to similar tools
+
+| Tool | What it does | Relation |
+|---|---|---|
+| [`git-leave`](https://github.com/mrnossiom/git-leave) | Rust CLI (`git leave`): dirty worktrees, branches ahead of upstream, branches with no upstream; multithreaded crawl | **finer-grained on git hygiene** (per-branch). This tool only summarises per repo |
+| [`pendector`](https://github.com/thaim/pendector) | Rust CLI: multi-directory scan, TOML config, JSON, Slack webhook | broader; this tool trades that for **zero install** (`npx`) and no config |
+| Platform stop hooks (e.g. Claude Code's `decision: block`) | run a script when a session ends, can block the stop | a stronger form of "you cannot forget"; this tool is run on demand, triggered by the skill |
+| Session-handoff plugins (`dsh-handoff*`) | export the session into a handoff document | complementary: they record *what happened*, this one decides *whether you need one* and what is still only on disk |
+
+**What is not duplicated here**: the scratch-directory check and the "should this session get a handoff" judgement.
+Everything else (dirty tree, unpushed commits) is git common sense — if that's all you need, use `git-leave`.
+
 ## What it checks
 
 | Check | How | Why it stays valid |
