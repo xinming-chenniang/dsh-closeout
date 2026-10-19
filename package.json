@@ -1,7 +1,7 @@
 {
   "name": "dsh-closeout",
-  "version": "0.1.0",
-  "description": "Pre-close checks for an AI coding session: uncommitted git work, files still only on disk, and a short written wrap-up — before you archive or delete the conversation.",
+  "version": "0.2.0",
+  "description": "Before you close an AI coding session: a verdict on whether you can archive or delete it — uncommitted work, unpushed commits, scratch files, and whether this session needs a handoff.",
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -21,6 +21,7 @@
   },
   "files": [
     "bin",
+    "lib",
     "skills",
     "README.md",
     "README.en.md",
