@@ -26,7 +26,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: node --test test/
+      - run: node --test test/closeout.test.mjs
       - name: smoke test the CLI
         run: |
           node bin/closeout.mjs --json | head -c 400

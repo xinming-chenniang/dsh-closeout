@@ -110,7 +110,7 @@ closeout --help
 ## 开发
 
 ```bash
-node --test test/      # 7 个用例：porcelain 解析 / 新文件筛选 / 空环境 / 渲染 / CLI 端到端 / 参数校验
+node --test test/closeout.test.mjs      # 7 个用例：porcelain 解析 / 新文件筛选 / 空环境 / 渲染 / CLI 端到端 / 参数校验
 node bin/closeout.mjs --repo . --zh
 ```
 
