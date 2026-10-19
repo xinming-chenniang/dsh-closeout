@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, utimesSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -40,7 +40,7 @@ test('listRecentFiles：只收"够新"的，且跳过 node_modules', () => {
     assert.deepEqual(hits.map((h) => h.path.split(/[\\/]/).pop()), ['fresh.txt'])
 
     const nm = join(dir, 'node_modules')
-    execFileSync(process.execPath, ['-e', `require('fs').mkdirSync(${JSON.stringify(nm)})`])
+    mkdirSync(nm)
     writeFileSync(join(nm, 'dep.js'), 'z')
     assert.equal(listRecentFiles(dir, 0).filter((h) => h.path.includes('node_modules')).length, 0)
   } finally {
