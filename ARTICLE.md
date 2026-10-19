@@ -96,4 +96,4 @@ git clone <仓库地址> ~/.dsh/skills/closeout   # 装成技能：说"收尾"�
 
 ---
 
-*仓库：<https://github.com/284022719/dsh-closeout> · 有建议直接开 issue —— 尤其是那些"我以为它保存了"的场景，我想收进反模式清单。*
+*仓库：<https://github.com/xinming-chenniang/dsh-closeout> · 有建议直接开 issue —— 尤其是那些"我以为它保存了"的场景，我想收进反模式清单。*

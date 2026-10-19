@@ -52,7 +52,7 @@ or modify anything. It is read-only.
 npx dsh-closeout                          # one-off
 npm i -g dsh-closeout && closeout --zh    # global command
 # as a skill for an agent that supports skill directories:
-git clone https://github.com/284022719/dsh-closeout ~/.dsh/skills/closeout
+git clone https://github.com/xinming-chenniang/dsh-closeout ~/.dsh/skills/closeout
 ```
 
 With the skill installed, saying "wrap up" or "I'm about to close this session" makes the agent run four steps:

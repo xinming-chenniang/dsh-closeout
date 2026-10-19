@@ -67,9 +67,9 @@ npm i -g dsh-closeout
 closeout --zh
 
 # 3) 装成技能（DSH / 任何支持技能目录的 agent）
-git clone https://github.com/284022719/dsh-closeout ~/.dsh/skills/closeout
-#   Windows:  git clone https://github.com/284022719/dsh-closeout %USERPROFILE%\.dsh\skills\closeout
-#   项目级:   git clone https://github.com/284022719/dsh-closeout <项目>/.dsh/skills/closeout
+git clone https://github.com/xinming-chenniang/dsh-closeout ~/.dsh/skills/closeout
+#   Windows:  git clone https://github.com/xinming-chenniang/dsh-closeout %USERPROFILE%\.dsh\skills\closeout
+#   项目级:   git clone https://github.com/xinming-chenniang/dsh-closeout <项目>/.dsh/skills/closeout
 ```
 
 装成技能后，说一句"收尾"或"准备关这个会话"，agent 就会按 `skills/closeout/SKILL.md` 的四步走：

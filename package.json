@@ -39,10 +39,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/284022719/dsh-closeout.git"
+    "url": "git+https://github.com/xinming-chenniang/dsh-closeout.git"
   },
-  "homepage": "https://github.com/284022719/dsh-closeout#readme",
+  "homepage": "https://github.com/xinming-chenniang/dsh-closeout#readme",
   "bugs": {
-    "url": "https://github.com/284022719/dsh-closeout/issues"
+    "url": "https://github.com/xinming-chenniang/dsh-closeout/issues"
   }
 }
