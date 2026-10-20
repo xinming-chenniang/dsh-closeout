@@ -44,7 +44,7 @@ export function parseArgs(argv) {
     repos: [], temp: [], hours: 12, json: false, strict: false, zh: false, help: false,
     session: null, sessionsDir: null, handoffs: null,
     threshold: 300, minCalls: 50, days: 3,
-    local: null, handoff: false, task: null, force: false, dryRun: false,
+    local: null, handoff: false, task: null, force: false, dryRun: false, cwdFromSession: false,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -67,6 +67,7 @@ export function parseArgs(argv) {
     else if (a === '--task') o.task = next()
     else if (a === '--force') o.force = true
     else if (a === '--dry-run') o.dryRun = true
+    else if (a === '--cwd-from-session') o.cwdFromSession = true
     else if (a === '--json') o.json = true
     else if (a === '--strict') o.strict = true
     else if (a === '--zh' || a === '--cn') o.zh = true
@@ -96,6 +97,8 @@ const HELP = `closeout — checks you want to run before archiving or deleting a
   --task <name>       handoff file name segment (default: basename of cwd)
   --force             overwrite an existing handoff file
   --dry-run           print the handoff skeleton instead of writing it
+  --cwd-from-session  use the session's recorded cwd as the working directory
+                      (the desktop client cannot read cwd from the event window)
   --json              machine-readable output
   --strict            exit 1 when something must be handled
   --zh                Chinese labels
