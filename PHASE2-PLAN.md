@@ -76,8 +76,8 @@ dsh-open-at-last-input/  # 不动
     ⚠️ 那目录在 `tmp\` 下，30 天清扫后证据图会消失；结论以本行文字为准。
   - [x] **点击＝填充并提交**：由 19 例单测点名覆盖（「继续/收尾/按建议执行：点击＝填进当前会话并提交」
     「重发上一条：覆盖草稿并提交」「没有打开的会话：按钮禁用」）。
-  - [ ] **人眼只剩一次现场点击**：真的按一下「继续」，确认消息出现在会话里。
-    （未做：这一下会往正在用的会话里真实发一条消息，留给用户点，不代劳。）
+  - [x] **现场点击**（2026-10-21 23:5x，用户点）：会话里收到「继续」二字 —— 填充并提交在真机上一次走通。
+    （单看消息内容分不出"点按钮"与"手打"，按用户确认算 PASS。）
   - [x] **502 降级**：`node tmp\20261021-dsh-button改名\test-502-degrade.mjs` → **6/6 PASS**
     （405 / 403 / 400 / 502 `closeout-failed` 且 message 带 ENOENT / 未设环境变量时 200 `ok:true`），
     走 `node_modules\dsh-button` junction 加载**装好的那份代码** + 真 HTTP 往返；
@@ -111,7 +111,7 @@ CLI 独立安装：`npm i -g dsh-closeout` 或 `npx dsh-closeout`；插件与 CL
 | dsh-closeout | 报告 | `--report` 四段齐全、无 undefined |
 | dsh-button | `node --test test/*.mjs` | pass 19 / fail 0（client 11 + host 8） |
 | dsh-button | 插件加载 | 桌面端启动 / web boot 无失败项 |
-| dsh-button | 按钮 | 五格出现 ✅（截图，2026-10-21 23:4x）；「继续」「收尾」填充并提交 ✅ 单测覆盖 / ⬜ 现场点击待用户 |
+| dsh-button | 按钮 | 五格出现 ✅（截图，2026-10-21 23:4x）；「继续」填充并提交 ✅（用户 23:5x 真点过） |
 | dsh-button | 面板 | 装了 closeout → JSON 返回 ✅；未装 → 502 降级提示 ✅（`test-502-degrade.mjs` 6/6） |
 | dsh-open-at-last | 视口 | 打开已结束会话落到最近一条本人发言 |
 
@@ -134,6 +134,6 @@ CLI 独立安装：`npm i -g dsh-closeout` 或 `npx dsh-closeout`；插件与 CL
 
 - ~~❌ push~~ → **已 push**（2026-10-21 23:5x，`5d13f9f..1be853f`；走 Veee HTTP 代理 `127.0.0.1:15236`，
   schannel 与 openssl 这次都握手失败，细节见 `D:\dsh\TECH.md`）。
-- ❌ npm publish（等打磨完）；`dsh-button` 仍无远端，要发 GitHub 得先建仓。
+- ❌ npm publish（等打磨完）。`dsh-button` 的仓已建并推上去：`https://github.com/xinming-chenniang/dsh-button`（2026-10-21 23:5x，11 个提交）。两包都是 `private: true`，真要发 npm 得先摘掉。
 - ❌ 三包合并（已定：独立）。
 - ❌ 删除旧 `dsh-closeout-button` 目录（改名后保留 git 历史；验证通过再决定）。
