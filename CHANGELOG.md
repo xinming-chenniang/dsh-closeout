@@ -2,6 +2,21 @@
 
 版本语义：0.x 阶段允许 breaking，但**每次都写在这里**。
 
+## 0.3.0 — 2026-10-21
+
+### 加
+
+- **`--report`**：生成四段收尾报告骨架（结论 / 做了什么 / 当前状态 / 未决·下一步 / 回滚点），`--report-out <文件>` 写盘。
+  与 `--handoff` 共享同源事实，但**不写 `原会话：` 行**（报告不参与 handoffs 台账，免得被误当成交接件）。
+- **`--cwd <dir>`**：指定要检查的工作目录（此前只能靠 `--cwd-from-session` 或进程 cwd）。
+- **收尾·同步提示**：报告里探测工作区 `tools/dsh-sync.*`，给出 `status` / `push` 命令，**只提示不调用**。
+
+### 变更
+
+- 文档统一口径：「收尾」= 同步（可选）→ 体检 → 交接（按需）→ 报告；旧词「收口」= 体检、「收工」= 同步。
+- README 增补 DSH 生态同类插件对比（`shared-handoff-dsh`、`@ericality/dsh-handoff`、`dsh-session-manager`、
+  `dsh-archived-chats`、`dsh-git`、`dsh-turnsnap`）与定位句：「只做判定，不抢别人的事」。
+
 ## 0.2.1 — 2026-10-20
 
 ### 修

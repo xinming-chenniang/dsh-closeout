@@ -23,6 +23,7 @@ import { parseSessionLines, handoffVerdict, daysSpan, readHandoffs } from '../li
 import { collect, conclude, sameTree } from '../lib/checks.mjs'
 import { render, TEXT } from '../lib/render.mjs'
 import { buildHandoff, writeHandoff, stampOf, safeName } from '../lib/handoff.mjs'
+import { buildReport, findSyncScript } from '../lib/report.mjs'
 
 const HOUR = 3600e3
 
@@ -300,4 +301,43 @@ test('CLI --strict：有必须处理项时退出码 1', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+/* --------------------------------------------------------------- report */
+
+test('buildReport：四段齐全，且不写「原会话：」行', withTmp(async (dir) => {
+  const r = {
+    cwd: dir,
+    repos: [{ dir, branch: 'main', staged: 0, modified: 0, untracked: 0, dirty: false, ahead: 0, behind: 0, upstream: true, files: [] }],
+    temp: [{ dir: join(dir, 'tmp'), files: [] }],
+    hours: 12,
+    sessionInfo: { id: 'session-abc', calls: 12, span: 1, last: Date.now() },
+    must: [],
+    glance: [],
+    fine: [],
+    skipped: [],
+    session: null,
+    handoff: { needed: false, reasons: [], exists: false, dir: join(dir, 'handoffs') },
+  }
+  const text = buildReport(r, { level: 'safe', blockers: 0 })
+  for (const h of ['## 结论', '## 做了什么', '## 当前状态', '## 未决 / 下一步', '## 回滚点']) {
+    assert.ok(text.includes(h), `缺少 ${h}`)
+  }
+  assert.ok(!text.includes('原会话：'), '报告不能带原会话行，否则会被 handoffs 台账当成交接件')
+  assert.ok(text.includes(dir))
+}))
+
+test('findSyncScript：只探测 tools/dsh-sync.*，不调用', withTmp(async (dir) => {
+  assert.equal(findSyncScript(dir), null)
+  mkdirSync(join(dir, 'tools'), { recursive: true })
+  writeFileSync(join(dir, 'tools', 'dsh-sync.ps1'), '# stub')
+  const hit = findSyncScript(dir)
+  assert.ok(hit && hit.name === 'dsh-sync.ps1')
+}))
+
+test('parseArgs：--cwd / --report / --report-out', () => {
+  const o = parseArgs(['--cwd', 'D:/w', '--report', '--report-out', 'r.md'])
+  assert.equal(o.cwd, 'D:/w')
+  assert.equal(o.report, true)
+  assert.equal(o.reportOut, 'r.md')
 })

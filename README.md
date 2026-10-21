@@ -44,18 +44,49 @@ npx dsh-closeout --zh
 
 共同点：**都不是代码 bug，是"关掉之前没人问一句"**。前三条工具能查（磁盘事实），第四条工具查不了——但它能替你判断"这个会话够长了、该写一份交接件了"，然后把骨架生成出来。
 
-## 和同类工具的区别
+## 收尾流程（2026-10-21 统一口径）
 
-这类事情已经有人做过了。诚实地说清楚差在哪：
+**收尾** = ① 同步（可选）→ ② 体检（本工具）→ ③ 交接（按需）→ ④ 报告（`--report`）。
+旧词对照：**收口** = 体检这一步；**收工** = 同步这一步；三个词的总称统一叫「收尾」。
+
+| 步骤 | 做什么 | 入口 |
+|---|---|---|
+| ① 收尾·同步 | 改一处就 commit，push 可以攒；本工具只**探测**工作区的 `tools/dsh-sync.*` 并提示，不调用 | `tools/dsh-sync.ps1 status/push` |
+| ② 收尾·体检 | `closeout --zh`（未提交 / 未推 / tmp 新文件 / 该不该交接） | 本工具 |
+| ③ 收尾·交接 | `closeout --handoff --task <任务名>` 出交接件骨架 | 本工具（或 handoff 类插件） |
+| ④ 收尾·报告 | `closeout --report` 出四段骨架：做了什么 / 当前状态 / 未决 / 回滚点 | 本工具 |
+
+## 和同类工具的区别（2026-10-21 扩写）
+
+这类事情已经有人做过了，DSH 生态里也有。诚实说清楚边界，免得被当成重复品：
+
+### DSH 生态里的相邻插件
+
+| 插件 | 它做什么 | 关系 |
+|---|---|---|
+| [`shared-handoff-dsh`](https://www.npmjs.com/package/shared-handoff-dsh) | `handoff` + `task-id-bootstrap` 技能；把会话导出成交接文档并接上任务状态 | **互补**：它执行交接，本工具判断"该不该交接"并出骨架 |
+| [`@ericality/dsh-handoff`](https://www.npmjs.com/package/@ericality/dsh-handoff) | `/handoff`：持久化改动、存进度、出新会话续接提示 | 同类（交接），无磁盘体检 |
+| `snow-The/dsh-session-handoff`、`yangyizhu8/dsh-session-handoff` | 社区 session handoff 插件（GitHub 安装，npm 无包） | 同类（交接） |
+| [`dsh-session-manager`](https://www.npmjs.com/package/dsh-session-manager) | 会话删/归档/移动/tag/批量；删除不可逆且必确认 | **互补**：它执行删除/归档动作，本工具给"能不能关"的依据 |
+| [`dsh-archived-chats`](https://www.npmjs.com/package/dsh-archived-chats)（Archive Management） | 归档找回、工作区批量归档、搜索、回收站 | 互补：管归档后的找回，不判断该不该归档 |
+| `dsh-git` | npm 0.0.1 占名、开发中；目标是 git 面板 + 阻止脏树/未推 | 最接近的竞品，**尚未发布** |
+| `dsh-turnsnap` | 每轮自动 `[turnsnap]` commit | 重叠在"自动提交"，目标不同 |
+
+### 非 DSH 的同类
 
 | 工具 | 它做什么 | 关系 |
 |---|---|---|
-| [`git-leave`](https://github.com/mrnossiom/git-leave) | Rust CLI，装好后是 `git leave`；列出脏工作区、领先上游的分支、**没有上游的分支**；多线程爬取，可配全局默认目录 | **git 卫生这块它更细**（逐分支列 ahead / no-upstream）。本工具只按仓库汇总 |
-| [`pendector`](https://github.com/thaim/pendector) | Rust CLI，多目录扫描 + TOML 配置 + JSON + Slack webhook | 覆盖面更广；本工具的取舍是**零安装**（`npx` 直接跑）与**不需要配置** |
-| 平台自带的 stop hook（如 Claude Code 的 `decision: block`） | 会话结束时跑脚本，能拦住结束并推你一句 | 这是"不让你忘记"的更强形态；本工具是"主动跑"，靠 skill 让 agent 触发 |
-| 会话交接插件（DSH 生态里的 `dsh-handoff*`） | 把会话内容导出成交接文档 | 互补：它们写"发生了什么"，本工具判断"该不该写、磁盘上还差什么" |
+| [`git-leave`](https://github.com/mrnossiom/git-leave) | Rust CLI；列出脏工作区、领先上游、**没有上游的分支** | git 卫生更细（逐分支）；本工具按仓库汇总 |
+| [`pendector`](https://github.com/thaim/pendector) | Rust CLI，多目录扫描 + TOML + JSON + Slack | 覆盖更广；本工具取舍是零安装、零配置 |
+| 平台 stop hook（如 Claude Code `decision: block`） | 会话结束时拦一下并提醒 | 更强形态；本工具是主动跑，靠 skill 触发 |
 
-**它唯一不重复的部分**：临时目录里"刚写出来的文件"这条检查，和"这个会话该不该交接"的判断。
+### 定位：只做判定，不抢别人的事
+
+**dsh-closeout = 关会话前的判定器**。它不替你交接（用 `shared-handoff-dsh` / `@ericality/dsh-handoff`）、
+不替你删会话（用 `dsh-session-manager`）、不自动 commit/push（用 `dsh-sync` / `dsh-git` / `dsh-turnsnap`）、
+不做归档找回（用 `dsh-archived-chats`）。它只回答两个问题：**能不能关、要不要交接**，并给出可复跑的清单。
+
+**它唯一不重复的部分**：临时目录里"刚写出来的文件"这条检查，"这个会话该不该交接"的判断，以及三档结论。
 其余（脏仓、未推送）是 git 常识，同类工具都有——如果你只需要那两条，用 `git-leave` 更合适。
 
 ## 它查什么
@@ -107,7 +138,7 @@ cp /tmp/dsh-closeout/skills/closeout/SKILL.md ~/.dsh/skills/closeout/
 #            copy %TEMP%\dsh-closeout\skills\closeout\SKILL.md %USERPROFILE%\.dsh\skills\closeout\
 ```
 
-装成技能后，说一句"收尾"或"准备关这个会话"，agent 就会按 `skills/closeout/SKILL.md` 的四步走：**体检 → 逐条处置 → 写交接件 → 才允许关**。
+装成技能后，说一句"收尾"或"准备关这个会话"，agent 就会按 `skills/closeout/SKILL.md` 的统一流程走：**同步（可选）→ 体检 → 交接（按需）→ 报告 → 才允许关**（旧词：收口 = 体检，收工 = 同步）。
 
 ## 用法
 
@@ -118,6 +149,8 @@ closeout --temp ./scratch --hours 6       # 指定临时目录与"多新算新"
 closeout --session <id>                   # 指定会话（默认 $DSH_SESSION_ID，其次"最近写入的那个"）
 closeout --local D:\dsh                   # 额外跑那个工作区自己的门
 closeout --handoff --task 收尾工具         # 生成交接件骨架
+closeout --report                         # 生成四段收尾报告骨架
+closeout --cwd D:\dsh --report            # 指定要检查的工作目录
 closeout --zh                             # 中文标签
 closeout --json                           # 机读
 closeout --strict                         # 有必须处理项就 exit 1
@@ -135,6 +168,18 @@ closeout --zh --handoff --task 收尾工具
 它会写 `~/.dsh/handoffs/<YYYYMMDD>-<任务名>.md`（用 `--handoffs` 换目录，`--dry-run` 只打印）。
 工具已知的事实——会话 id、次数、跨天、未提交的仓、临时文件——会填进「当前状态（可复跑验证）」一节；
 「做了什么 / 未决 / 回滚点」留空，因为**只有会话自己知道**。默认**不覆盖**已有文件（覆盖等于丢掉别人写的东西），要覆盖加 `--force`。
+
+### 生成收尾报告
+
+```bash
+closeout --zh --report                          # 打印（不写盘）
+closeout --zh --report --report-out 收尾报告.md  # 写盘
+```
+
+四段：结论 / 做了什么 / 当前状态（可复跑验证）/ 未决·下一步 / 回滚点 —— 与交接件同源事实，
+但**不写 `原会话：` 行**：报告不参与 handoffs 台账，避免被下一个会话误当成交接件。
+「收尾·同步」一节会探测当前工作区的 `tools/dsh-sync.*` 并给出命令提示，**不调用**。
+`--cwd <dir>` 可指定检查哪个工作目录（默认当前目录；桌面端可配 `--cwd-from-session`）。
 
 ### 机读 / CI
 

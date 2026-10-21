@@ -24,10 +24,11 @@
  */
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { realpathSync } from 'node:fs'
+import { realpathSync, writeFileSync } from 'node:fs'
 import { collect, conclude } from '../lib/checks.mjs'
 import { TEXT, render } from '../lib/render.mjs'
 import { buildHandoff, safeName, writeHandoff } from '../lib/handoff.mjs'
+import { buildReport } from '../lib/report.mjs'
 import { parsePorcelain, gitStatus, discoverRepos } from '../lib/git.mjs'
 import { listRecentFiles } from '../lib/files.mjs'
 
@@ -45,6 +46,7 @@ export function parseArgs(argv) {
     session: null, sessionsDir: null, handoffs: null,
     threshold: 300, minCalls: 50, days: 3,
     local: null, handoff: false, task: null, force: false, dryRun: false, cwdFromSession: false,
+    cwd: null, report: false, reportOut: null,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -68,6 +70,9 @@ export function parseArgs(argv) {
     else if (a === '--force') o.force = true
     else if (a === '--dry-run') o.dryRun = true
     else if (a === '--cwd-from-session') o.cwdFromSession = true
+    else if (a === '--cwd') o.cwd = next()
+    else if (a === '--report') o.report = true
+    else if (a === '--report-out') o.reportOut = next()
     else if (a === '--json') o.json = true
     else if (a === '--strict') o.strict = true
     else if (a === '--zh' || a === '--cn') o.zh = true
@@ -99,6 +104,9 @@ const HELP = `closeout — checks you want to run before archiving or deleting a
   --dry-run           print the handoff skeleton instead of writing it
   --cwd-from-session  use the session's recorded cwd as the working directory
                       (the desktop client cannot read cwd from the event window)
+  --cwd <dir>         working directory to inspect (default: cwd)
+  --report            print a wrap-up report skeleton (four sections)
+  --report-out <f>    write the report to this file instead of stdout
   --json              machine-readable output
   --strict            exit 1 when something must be handled
   --zh                Chinese labels
@@ -121,7 +129,8 @@ function main(argv) {
   }
 
   const t = opts.zh ? TEXT.zh : TEXT.en
-  const r = collect(opts)
+  const cwd0 = opts.cwd ? resolve(opts.cwd) : process.cwd()
+  const r = collect(opts, cwd0)
   const v = conclude(r)
   const verdictText = v.level === 'no-delete'
     ? t.verdictNoDelete(v.blockers)
@@ -160,6 +169,17 @@ function main(argv) {
       if (w.written) process.stdout.write(`\n已写交接件：${w.path}\n`)
       else if (w.reason === 'exists') process.stdout.write(`\n交接件已存在，未覆盖（要覆盖加 --force）：${w.path}\n`)
       else process.stdout.write(`\n交接件写失败：${w.reason}（${w.path}）\n`)
+    }
+  }
+
+  if (opts.report) {
+    const text = buildReport(r, v, { task: opts.task ? safeName(opts.task) : undefined })
+    if (opts.reportOut) {
+      const out = resolve(cwd0, opts.reportOut)
+      writeFileSync(out, text)
+      process.stdout.write(`\n已写收尾报告：${out}\n`)
+    } else {
+      process.stdout.write(`\n===== 收尾报告（--report，未写盘）=====\n\n${text}`)
     }
   }
 

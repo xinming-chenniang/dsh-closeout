@@ -41,6 +41,18 @@ Things that actually happened in my own sessions:
 The first three are disk facts, so they became a command. The fourth isn't — but the tool can still tell you
 *this session is long enough to deserve a handoff note*, and generate its skeleton.
 
+## Wrap-up flow (2026-10-21)
+
+**Wrap-up** = ① sync (optional) → ② check (this tool) → ③ handoff (if needed) → ④ report (`--report`).
+The older Chinese words «收口» (check step) and «收工» (sync step) are now steps of the same flow, not separate tools.
+
+| Step | What | Entry |
+|---|---|---|
+| ① sync | commit as you go; push can wait | `tools/dsh-sync.ps1 status/push` (probed, never called) |
+| ② check | uncommitted / unpushed / fresh scratch files / handoff needed | `closeout --zh` |
+| ③ handoff | skeleton for the next session | `closeout --handoff --task <name>` |
+| ④ report | four-section wrap-up report | `closeout --report` |
+
 ## Compared to similar tools
 
 | Tool | What it does | Relation |
@@ -50,8 +62,25 @@ The first three are disk facts, so they became a command. The fourth isn't — b
 | Platform stop hooks (e.g. Claude Code's `decision: block`) | run a script when a session ends, can block the stop | a stronger form of "you cannot forget"; this tool is run on demand, triggered by the skill |
 | Session-handoff plugins (`dsh-handoff*`) | export the session into a handoff document | complementary: they record *what happened*, this one decides *whether you need one* and what is still only on disk |
 
-**What is not duplicated here**: the scratch-directory check and the "should this session get a handoff" judgement.
-Everything else (dirty tree, unpushed commits) is git common sense — if that's all you need, use `git-leave`.
+**What is not duplicated here**: the scratch-directory check, the "should this session get a handoff" judgement,
+and the three-level verdict. Everything else (dirty tree, unpushed commits) is git common sense.
+
+### Neighbouring DSH plugins
+
+| Plugin | What it does | Relation |
+|---|---|---|
+| [`shared-handoff-dsh`](https://www.npmjs.com/package/shared-handoff-dsh) | `handoff` + `task-id-bootstrap` skills: export the session and bind a task | **complementary**: it performs the handoff; this tool decides whether one is needed and builds the skeleton |
+| [`@ericality/dsh-handoff`](https://www.npmjs.com/package/@ericality/dsh-handoff) | `/handoff`: persist changes, save progress, emit a continuation prompt | same space (handoff), no disk check |
+| `dsh-session-handoff` (community) | session handoff plugins, GitHub-installed | same space (handoff) |
+| [`dsh-session-manager`](https://www.npmjs.com/package/dsh-session-manager) | delete / archive / move / tag sessions; delete is irreversible and always confirmed | **complementary**: it does the deleting; this tool gives the "can I close" evidence |
+| [`dsh-archived-chats`](https://www.npmjs.com/package/dsh-archived-chats) | archive retrieval, bulk archiving, search, recycle bin | complementary: retrieval after archiving |
+| `dsh-git` | npm 0.0.1 placeholder, in development: git panel + block dirty trees | closest competitor, **not released yet** |
+| `dsh-turnsnap` | auto `[turnsnap]` commit per turn | overlaps on auto-commit, different goal |
+
+**Scope**: dsh-closeout is a **close-out verdict tool**. It does not perform handoffs (use the handoff plugins),
+delete sessions (use `dsh-session-manager`), auto-commit/push (use `dsh-sync` / `dsh-git` / `dsh-turnsnap`),
+or restore archives (use `dsh-archived-chats`). It answers two questions — *can I close*, *does this need a handoff* —
+and prints a re-runnable checklist.
 
 ## What it checks
 
@@ -83,8 +112,8 @@ mkdir -p ~/.dsh/skills/closeout
 cp /tmp/dsh-closeout/skills/closeout/SKILL.md ~/.dsh/skills/closeout/
 ```
 
-With the skill installed, saying "wrap up" or "I'm about to close this session" makes the agent run four steps:
-**check → fix each item → write the handoff note → only then close**.
+With the skill installed, saying "wrap up" or "I'm about to close this session" makes the agent run the unified flow:
+**sync (optional) → check → handoff (if needed) → report → only then close**.
 
 ## Usage
 
@@ -95,6 +124,8 @@ closeout --temp ./scratch --hours 6       # scratch dirs + recency window
 closeout --session <id>                   # default: $DSH_SESSION_ID, else the most recent one
 closeout --local D:\dsh                   # also run that workspace's own gates
 closeout --handoff --task "wrap up"       # write a handoff skeleton
+closeout --report                         # print a wrap-up report skeleton
+closeout --cwd D:\dsh --report            # inspect another working directory
 closeout --json | --strict | --zh | --help
 ```
 
@@ -107,6 +138,14 @@ Exit codes: `0` finished (must-handle items included), `1` with `--strict` and s
 print only with `--dry-run`). It fills the "current state" section with what it already knows — session id,
 call count, day span, dirty repos, scratch files — and leaves the three sections only a session can write:
 *what was done / open items / rollback*. It never overwrites an existing note unless you pass `--force`.
+
+### Wrap-up report
+
+`closeout --report` prints a four-section skeleton (verdict / what was done / current state / open items / rollback).
+`--report-out <file>` writes it to disk. Shared facts come from the same collector as the handoff skeleton, but the
+report deliberately **omits the `原会话：` line** so the handoff ledger never mistakes it for a handoff note.
+A "sync" section probes `tools/dsh-sync.*` and prints the commands — it never calls them.
+`--cwd <dir>` inspects another working directory (default: cwd; the desktop client can use `--cwd-from-session`).
 
 ## License
 
