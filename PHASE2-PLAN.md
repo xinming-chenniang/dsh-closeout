@@ -92,7 +92,7 @@ dsh-open-at-last-input/  # 不动
 | --- | --- | --- |
 | `link:` | `dsh plugin --profile desktop add link:D:/dsh/dsh-button` | 开发期（改源码即生效） |
 | `file:` | `dsh plugin --profile desktop add file:../dsh-button` | 快照 |
-| tgz | `dsh plugin --profile desktop add ./dsh-button-0.5.0.tgz` | GitHub Release 分发，不需要 npm |
+| tgz | `dsh plugin --profile desktop add ./dsh-button-0.5.0.tgz` | **已发**：[v0.5.0 Release](https://github.com/xinming-chenniang/dsh-button/releases/tag/v0.5.0)（20,018 B，sha256 `adff19c9…6078`）|
 | npm | `dsh plugin --profile web add dsh-button` | 可选，打磨完再说 |
 
 CLI 独立安装：`npm i -g dsh-closeout` 或 `npx dsh-closeout`；插件与 CLI 可以不同版本。
@@ -134,6 +134,7 @@ CLI 独立安装：`npm i -g dsh-closeout` 或 `npx dsh-closeout`；插件与 CL
 
 - ~~❌ push~~ → **已 push**（2026-10-21 23:5x，`5d13f9f..1be853f`；走 Veee HTTP 代理 `127.0.0.1:15236`，
   schannel 与 openssl 这次都握手失败，细节见 `D:\dsh\TECH.md`）。
-- ❌ npm publish（等打磨完）。`dsh-button` 的仓已建并推上去：`https://github.com/xinming-chenniang/dsh-button`（2026-10-21 23:5x，11 个提交）。两包都是 `private: true`，真要发 npm 得先摘掉。
+- ~~❌ tgz / Release / badge~~ → **已发**（2026-10-22 00:1x）：tag `v0.5.0`（指向 `d5d8897`）+ GitHub Release + tgz 资产 + README 徽标。
+- ❌ npm publish（等打磨完）。两包都是 `private: true`，真要发 npm 得先摘掉；`dsh-button` 仓：`https://github.com/xinming-chenniang/dsh-button`。
 - ❌ 三包合并（已定：独立）。
 - ❌ 删除旧 `dsh-closeout-button` 目录（改名后保留 git 历史；验证通过再决定）。
