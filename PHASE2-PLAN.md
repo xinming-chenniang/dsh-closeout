@@ -46,9 +46,11 @@ dsh-open-at-last-input/  # 不动
 
 ### 3.1 dsh-closeout（v0.4.0）
 - [x] 已无按钮代码（v0.3.0 起就是纯 CLI+skill）。
-- [ ] README（中/英）：加一句"输入框按钮在 `dsh-button`，本包不装任何 UI"。
-- [ ] CHANGELOG 0.4.0：职责澄清（不是新功能）。
-- [ ] 验证：`node --test`（23 例）+ `node bin/closeout.mjs --zh --report`。
+- [x] README（中/英）：加一句"输入框按钮在 `dsh-button`，本包不装任何 UI"
+  （`README.md:8`、`README.en.md:7`）。
+- [x] CHANGELOG 0.4.0：职责澄清（不是新功能）。
+- [x] 验证：`node --test`（23 例）+ `node bin/closeout.mjs --zh --report` —— 2026-10-21 23:4x 复跑，
+  **pass 23 / fail 0**，四段报告齐全、无 `undefined`。
 
 ### 3.2 dsh-button（v0.5.0，原 dsh-closeout-button）
 - [x] `package.json`：`name` 改为 `dsh-button`，版本 0.5.0；`private` 暂时保留（未发布）。
@@ -67,8 +69,16 @@ dsh-open-at-last-input/  # 不动
   - [x] **重启后自动化验证**（2026-10-21 22:03 应用重启后跑 `tmp\20261021-dsh-button改名\verify-after-restart.ps1`）：
     `POST /api/dsh-closeout/check` → **200 + `ok:true`**（closeout 13 个字段齐全，3.0 s）；返回的 `repos` 里已有
     `D:/dsh/dsh-button` —— 说明跑的就是改名后的树。
-  - [ ] **人眼两项**：输入框左侧五个格子是否都在；点「继续」「收尾」是否真发出去。
-    （502 降级分支要另开一次带 `DSH_CLOSEOUT_BIN=Z:\nope.mjs` 的启动才验得到。）
+  - [x] **界面五格**（2026-10-21 23:4x 验，不靠人眼）：截取运行中窗口画面，输入框左侧依次是
+    **继续 / 收尾 / 按建议执行 / 收口 / 重发上一条**（`+` 与盾牌图标是宿主自带的）。
+    证据图 `D:\dsh\tmp\20261021-dsh-button改名\evidence\composer-buttons-20261021.png`，
+    截法 `tmp\20261021-dsh-button改名\grab-window.py`（Win32 `PrintWindow`，只读不点击）。
+    ⚠️ 那目录在 `tmp\` 下，30 天清扫后证据图会消失；结论以本行文字为准。
+  - [x] **点击＝填充并提交**：由 19 例单测点名覆盖（「继续/收尾/按建议执行：点击＝填进当前会话并提交」
+    「重发上一条：覆盖草稿并提交」「没有打开的会话：按钮禁用」）。
+  - [ ] **人眼只剩一次现场点击**：真的按一下「继续」，确认消息出现在会话里。
+    （未做：这一下会往正在用的会话里真实发一条消息，留给用户点，不代劳。）
+    502 降级分支要另开一次带 `DSH_CLOSEOUT_BIN=Z:\nope.mjs` 的启动才验得到（单测已覆盖该分支）。
 
 ### 3.3 dsh-open-at-last-input
 - [x] 不动。
@@ -84,15 +94,21 @@ dsh-open-at-last-input/  # 不动
 
 CLI 独立安装：`npm i -g dsh-closeout` 或 `npx dsh-closeout`；插件与 CLI 可以不同版本。
 
+**打包前先清 `lib\`**（2026-10-21 变实际踩到的坑）：`package.json` 的 `files: ["lib", …]` 是整目录打包，
+`lib\*.bak-before-panel` 这类开发备份虽被 `.gitignore` 排除、**却会进 tgz**。改名后 `lib\` 里躺着
+`client.js.bak-before-panel` / `index.js.bak-before-panel` 两份（2026-10-20 的旧备份），已移到
+`D:\dsh\tmp\_trash\20261021\dsh-button-lib-bak\`；现在 `lib\` 只剩 `client.js` + `index.js`。
+判据：`Get-ChildItem lib` 只该有这两个文件；`.bak` 一律别放在 `lib\` 里。
+
 ## 5. 验证矩阵
 
 | 包 | 检查 | 判据 |
 | --- | --- | --- |
 | dsh-closeout | `node --test` | pass 23 / fail 0 |
 | dsh-closeout | 报告 | `--report` 四段齐全、无 undefined |
-| dsh-button | `node --test test/*.mjs` | 现有 10 例全过 |
+| dsh-button | `node --test test/*.mjs` | pass 19 / fail 0（client 11 + host 8） |
 | dsh-button | 插件加载 | 桌面端启动 / web boot 无失败项 |
-| dsh-button | 按钮 | 五格出现；「继续」「收尾」填充并提交 |
+| dsh-button | 按钮 | 五格出现 ✅（截图，2026-10-21 23:4x）；「继续」「收尾」填充并提交 ✅ 单测覆盖 / ⬜ 现场点击待用户 |
 | dsh-button | 面板 | 装了 closeout → JSON 返回；未装 → 502 降级提示 |
 | dsh-open-at-last | 视口 | 打开已结束会话落到最近一条本人发言 |
 
