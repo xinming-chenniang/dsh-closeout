@@ -51,17 +51,20 @@ dsh-open-at-last-input/  # 不动
 - [ ] 验证：`node --test`（23 例）+ `node bin/closeout.mjs --zh --report`。
 
 ### 3.2 dsh-button（v0.5.0，原 dsh-closeout-button）
-- [ ] `package.json`：`name` 改为 `dsh-button`，版本 0.5.0；`private` 暂时保留（未发布）。
-- [ ] `cordis.patch.yml`：`insert.id` / `name` 改为 `dsh-button`（必须等于包名，否则静默装不上）。
-- [ ] `lib/index.js`：`name` 常量与注释改为 `dsh-button`（路由 `/api/dsh-closeout` 保留——它是面板语义，不是包名）。
-- [ ] `lib/client.js`：`id`、`NAMESPACE` 改为 `dsh-button`（插槽格子 id 用 NAMESPACE 派生）。
-- [ ] `test/*.mjs`：名字引用同步。
-- [ ] README：标题改为 dsh-button；写明"面板需要 dsh-closeout（可选）"。
-- [ ] 验证：`node --test test/*.mjs`（host + client，现有 10 例）。
-- [ ] **目录改名与安装（需重启应用，单独一步）**：
-  - `Rename-Item D:\dsh\dsh-closeout-button D:\dsh\dsh-button`；
-  - profile `package.json` 的 `link:` 依赖键改名，重建 `node_modules` junction；
-  - 重启应用后跑验证矩阵；**此步在会话外确认后执行**（会断开当前 GUI）。
+- [x] `package.json`：`name` 改为 `dsh-button`，版本 0.5.0；`private` 暂时保留（未发布）。
+- [x] `cordis.patch.yml`：`insert.id` / `name` 改为 `dsh-button`（必须等于包名，否则静默装不上）。
+- [x] `lib/index.js`：`name` 常量与注释改为 `dsh-button`（`ctx.effect` 的标签也一并改；路由 `/api/dsh-closeout` 保留——它是面板语义，不是包名）。
+- [x] `lib/client.js`：`id`、`NAMESPACE` 改为 `dsh-button`（插槽格子 id 用 NAMESPACE 派生）。
+- [x] `test/*.mjs`：名字引用同步（19 例全过）。
+- [x] README：标题改为 dsh-button；写明"面板需要 dsh-closeout（可选）"；路径与格子 id 同步新名。
+- [x] 验证：`node --test test/*.mjs` → **pass 19 / fail 0**（2026-10-21 改名后在 `D:\dsh\dsh-button` 复跑）。
+- [x] **目录改名与安装**（2026-10-21 21:31 执行，脚本 `D:\dsh\tmp\20261021-dsh-button改名\rename.ps1`）：
+  - `Rename-Item D:\dsh\dsh-closeout-button D:\dsh\dsh-button`（`.git` 随目录搬，历史完整）；
+  - profile `package.json`：`dependencies` 键与 `dsh.profile.bundles[24]` 同位置替换（bundles 仍 29 项）；
+  - `node_modules`：删旧 junction、建 `dsh-button` junction（先删后建——反过来会留悬空链接）；
+  - **锁两处**：profile 根 `pnpm-lock.yaml` **与** `node_modules\.pnpm\lock.yaml`（`pnpm ls` / `dsh plugin list` 读后者）；
+  - 脚本内 16 条断言全 PASS；`dsh plugin --profile desktop list` 已显示 `dsh-button@link:D:/dsh/dsh-button`。
+  - [ ] **重启应用后跑运行时验证矩阵**（五格出现 / 继续·收尾填充提交 / 收口返回 JSON / `DSH_CLOSEOUT_BIN` 指错路径 → 502 降级）。
 
 ### 3.3 dsh-open-at-last-input
 - [x] 不动。
