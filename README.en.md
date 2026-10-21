@@ -2,17 +2,20 @@
 
 > Run this **before** you archive or delete an AI coding session: what still lives only on disk — and does this session need a handoff?
 
-A zero-dependency CLI plus a skill (agent instructions). It answers two questions and **puts the verdict first**:
+A zero-dependency CLI plus a skill (agent instructions). **Two scopes, verdict first**:
+
+| Subcommand | Answers | Looks at |
+|---|---|---|
+| `closeout` (default, = `closeout session`) | can **this session** be closed; does it need a handoff note | session metadata (calls / day span / last turn / goal blocked), dirty & unpushed repos, fresh scratch files |
+| `closeout app` | can **DSH itself** exit; will the next start come up | running instances, pending-restart marker, session-store closure, profile bundle integrity |
 
 > **No buttons/UI in this package** (since 2026-10-21): the composer buttons (continue / wrap-up / follow-suggestions /
 > resend + closeout panel) live in the separate plugin `dsh-button`, which spawns this CLI and degrades gracefully
 > when it is not installed.
 
-1. **Can I close this?** (archiving is reversible, deleting is not — only deletion is gated)
-2. **Does this session need a handoff note?** (length, day span, whether it ended cleanly)
-
 ```bash
-npx dsh-closeout
+npx dsh-closeout        # close this session: archive/delete verdict + handoff check
+npx dsh-closeout app    # close DSH itself: can I exit, what to confirm first
 ```
 
 ```text
@@ -56,6 +59,7 @@ The older Chinese words «收口» (check step) and «收工» (sync step) are n
 | ② check | uncommitted / unpushed / fresh scratch files / handoff needed | `closeout --zh` |
 | ③ handoff | skeleton for the next session | `closeout --handoff --task <name>` |
 | ④ report | four-section wrap-up report | `closeout --report` |
+| ⑤ exit DSH | pending restart / unfinished sessions / profile integrity — **the other scope**, only when closing the whole app | `closeout app --zh` |
 
 ## Compared to similar tools
 
@@ -122,26 +126,45 @@ With the skill installed, saying "wrap up" or "I'm about to close this session" 
 ## Usage
 
 ```bash
-closeout                                  # auto-discover repos
+closeout                                  # close this session (default); auto-discover repos
 closeout --repo ../api --repo ../web      # explicit (repeatable)
 closeout --temp ./scratch --hours 6       # scratch dirs + recency window
 closeout --session <id>                   # default: $DSH_SESSION_ID, else the most recent one
+closeout --token-threshold 150000          # context tokens above which a handoff is expected (default 0 = off)
 closeout --local D:\dsh                   # also run that workspace's own gates
 closeout --handoff --task "wrap up"       # write a handoff skeleton
 closeout --report                         # print a wrap-up report skeleton
 closeout --cwd D:\dsh --report            # inspect another working directory
+closeout app                              # close DSH itself: runtime / pending restart / sessions / profile
+closeout app --local D:\dsh --json        # same workspace gates, machine-readable
 closeout --json | --strict | --zh | --help
 ```
 
 Exit codes: `0` finished (must-handle items included), `1` with `--strict` and something must be handled,
 `2` bad arguments.
 
+### Closing DSH itself (`closeout app`)
+
+A separate scope from the session check. It looks at four outside facts and **only gates what would break the
+next start**:
+
+1. running instances (process count + memory; read-only, kills nothing);
+2. pending-restart marker (`dsh-plugin-restart/pending-restart.json` — config changed, not yet in effect);
+3. last restart result (`restart-result.json` — `ok` / `phase`; anything but `ok:true + relaunched` is a must-handle item);
+4. session store (sessions written in the last N minutes, sessions whose last turn never completed);
+5. profile bundle integrity (bundles resolvable, `link:` targets present — a break here means "won't boot").
+
+Verdicts: `do NOT exit yet` (a must-handle item) / `safe to exit; confirm N thing(s) first` / `safe to exit`.
+Runtime state is a reminder, never a blocker — exiting is exactly what ends it. Host-memory state (background
+jobs, terminals, pending approvals) cannot be read from outside, so it is reported as *not checked*, not as fine.
+
 ### Handoff skeleton
 
 `closeout --handoff --task <name>` writes `~/.dsh/handoffs/<YYYYMMDD>-<name>.md` (override with `--handoffs`,
-print only with `--dry-run`). It fills the "current state" section with what it already knows — session id,
-call count, day span, dirty repos, scratch files — and leaves the three sections only a session can write:
-*what was done / open items / rollback*. It never overwrites an existing note unless you pass `--force`.
+print only with `--dry-run`). Seven sections: **goal / what was done / current state / key files / open items /
+open questions / rollback**. It fills what it already knows — session title (goal), session id, call count,
+context tokens, day span, dirty repos and their files (key files) — and leaves *what was done / open items /
+open questions / rollback* to the session itself. It never overwrites an existing note unless you pass `--force`.
 
 ### Wrap-up report
 

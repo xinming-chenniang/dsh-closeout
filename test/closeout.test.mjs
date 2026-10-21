@@ -20,7 +20,8 @@ import { parseArgs } from '../bin/closeout.mjs'
 import { parsePorcelain } from '../lib/git.mjs'
 import { listRecentFiles } from '../lib/files.mjs'
 import { parseSessionLines, handoffVerdict, daysSpan, readHandoffs } from '../lib/session.mjs'
-import { collect, conclude, sameTree } from '../lib/checks.mjs'
+import { collect, conclude, sameTree, localGates } from '../lib/checks.mjs'
+import { checkProfile, concludeApp, parseMem, readPendingRestart, readRestartResult, scanSessions } from '../lib/app.mjs'
 import { render, TEXT } from '../lib/render.mjs'
 import { buildHandoff, writeHandoff, stampOf, safeName } from '../lib/handoff.mjs'
 import { buildReport, findSyncScript } from '../lib/report.mjs'
@@ -341,3 +342,169 @@ test('parseArgs：--cwd / --report / --report-out', () => {
   assert.equal(o.report, true)
   assert.equal(o.reportOut, 'r.md')
 })
+
+/* --------------------------------------------------------- app 口径（关闭 DSH） */
+
+test('parseArgs：子命令 app / session；默认仍是 session（向后兼容）', () => {
+  assert.equal(parseArgs([]).scope, 'session')
+  assert.equal(parseArgs(['session', '--json']).scope, 'session')
+  assert.equal(parseArgs(['app', '--zh']).scope, 'app')
+  assert.equal(parseArgs(['app', '--recent-minutes', '5']).recentMinutes, 5)
+  assert.equal(parseArgs(['app']).appName, 'DeepSeek Harness')
+  assert.throws(() => parseArgs(['app', '--max-sessions', '0']), /positive/)
+})
+
+test('parseMem：tasklist 的内存列（带千分位 / 单位）', () => {
+  assert.equal(parseMem('123,456 K'), 123456)
+  assert.equal(parseMem('1.5 G'), Math.round(1.5 * 1048576))
+  assert.equal(parseMem('2 M'), 2048)
+  assert.equal(parseMem(''), null)
+  assert.equal(parseMem('n/a'), null)
+})
+
+test('checkProfile：坏 JSON / 空 bundles / link 目标不存在 = 必须处理（下次起不来）', withTmp(async (dir) => {
+  const p = join(dir, 'profile')
+  mkdirSync(p, { recursive: true })
+
+  writeFileSync(join(p, 'package.json'), '{ not json')
+  assert.equal(checkProfile(p).must.length, 1)
+
+  writeFileSync(join(p, 'package.json'), JSON.stringify({ dependencies: {}, dsh: { profile: { bundles: [] } } }))
+  assert.match(checkProfile(p).must[0].text, /bundles/)
+
+  writeFileSync(join(p, 'package.json'), JSON.stringify({
+    dependencies: { a: 'link:D:/no-such-dir' },
+    dsh: { profile: { bundles: ['a'] } },
+  }))
+  const c = checkProfile(p)
+  assert.ok(c.must.some((m) => /目标不存在/.test(m.text)), `应报 link 断开：${JSON.stringify(c.must)}`)
+}))
+
+test('checkProfile：第三方可解析即通过；@deepseek-ai 内置包不落 node_modules 也不误报', withTmp(async (dir) => {
+  const p = join(dir, 'profile')
+  mkdirSync(join(p, 'node_modules', 'ok'), { recursive: true })
+  writeFileSync(join(p, 'node_modules', 'ok', 'package.json'), '{}')
+  writeFileSync(join(p, 'package.json'), JSON.stringify({
+    dependencies: { ok: '1.0.0' },
+    dsh: { profile: { bundles: ['ok', '@deepseek-ai/dsh-base'] } },
+  }))
+  const c = checkProfile(p)
+  assert.equal(c.must.length, 0, `内置包不该被要求出现在 dependencies：${JSON.stringify(c.must)}`)
+  assert.ok(c.fine.some((f) => /全部可解析/.test(f.text)))
+}))
+
+test('scanSessions：60 次调用且末尾 interrupted 的会话进「顺手看一眼」', withTmp(async (dir) => {
+  const zlib = await import('node:zlib')
+  if (typeof zlib.zstdCompressSync !== 'function') return // Node < 22：会话这项本来整项降级
+  const root = join(dir, 'sessions')
+  const id = 'session-11111111-2222-3333-4444-555555555555'
+  const sdir = join(root, '--x--', id)
+  mkdirSync(sdir, { recursive: true })
+  const now = Date.now()
+  const lines = [JSON.stringify({ type: 'session', id, createdAt: now - 60000, cwd: dir, delegationDepth: 0 })]
+  for (let i = 0; i < 60; i++) lines.push(JSON.stringify({ type: 'tool/call', time: now - 50000 + i * 10 }))
+  lines.push(JSON.stringify({ type: 'turn/end', time: now - 40000, data: { reason: { kind: 'interrupted' } } }))
+  writeFileSync(join(sdir, 'session.jsonl.zstd'), zlib.zstdCompressSync(Buffer.from(lines.join('\n'))))
+
+  const r = scanSessions({ sessionsDir: root, recentMinutes: 15, maxSessions: 5, minCalls: 50 })
+  assert.equal(r.stats.total, 1)
+  assert.equal(r.glance.filter((g) => g.id === 'app-sessions-open').length, 1, JSON.stringify(r))
+  assert.equal(r.must.length, 0)
+}))
+
+test('readPendingRestart：没标记 / 标记坏了 要分开', withTmp(async (dir) => {
+  assert.equal(readPendingRestart(join(dir, 'none')).found, false)
+  writeFileSync(join(dir, 'pending-restart.json'), '{ broken')
+  const r = readPendingRestart(dir)
+  assert.equal(r.found, true)
+  assert.ok(r.error, '解析失败必须暴露出来，不能当成"没有标记"')
+}))
+
+test('concludeApp：三档结论', () => {
+  assert.equal(concludeApp({ must: [{}], glance: [] }).level, 'no-exit')
+  assert.equal(concludeApp({ must: [], glance: [{}] }).level, 'check-first')
+  assert.equal(concludeApp({ must: [], glance: [] }).level, 'safe-exit')
+})
+
+test('CLI app：--json 是合法 JSON，scope=app，结论三档之一', () => {
+  const here = fileURLToPath(new URL('..', import.meta.url))
+  const dir = mkdtempSync(join(tmpdir(), 'closeout-app-'))
+  try {
+    const out = execFileSync(process.execPath, [
+      join(here, 'bin', 'closeout.mjs'), 'app', '--json',
+      '--sessions-dir', join(dir, 'no-sessions'),
+      '--profile', join(dir, 'no-profile'),
+      '--restart-dir', join(dir, 'no-restart'),
+      '--app-name', '__no_such_app__',
+    ], { cwd: dir, encoding: 'utf8' })
+    const j = JSON.parse(out)
+    assert.equal(j.scope, 'app')
+    assert.ok(['no-exit', 'check-first', 'safe-exit'].includes(j.verdict), `verdict 取值意外：${j.verdict}`)
+    assert.equal(typeof j.verdictText, 'string')
+    assert.ok(Array.isArray(j.must) && Array.isArray(j.skipped))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('localGates：没有 tools/ 脚本时明说没查，而不是当成通过', withTmp(async (dir) => {
+  const g = localGates(dir)
+  assert.equal(g.fine.length, 0)
+  assert.ok(g.skipped.some((s) => /没查/.test(s.text)), JSON.stringify(g.skipped))
+}))
+
+/* ------------------------------------------------- P0：token / 重启结果 / 交接三节 */
+
+test('parseSessionLines：累计 usage 取最大值，且不碰正文', () => {
+  const lines = [
+    JSON.stringify({ type: 'session', id: 'session-x', createdAt: 1000 }),
+    JSON.stringify({ type: 'assistant/message', time: 2000, data: { usage: { inputTokens: 100, outputTokens: 10, totalTokens: 110 } } }),
+    JSON.stringify({ type: 'assistant/message', time: 3000, data: { usage: { inputTokens: 5000, outputTokens: 20, totalTokens: 5020 } } }),
+    JSON.stringify({ type: 'assistant/message', time: 4000, data: { usage: { inputTokens: 900, outputTokens: 10, totalTokens: 910 } } }),
+  ]
+  const m = parseSessionLines(lines)
+  assert.equal(m.lastUsage.totalTokens, 910, 'lastUsage 取最后一条')
+  assert.equal(m.maxTotalTokens, 5020, 'maxTotalTokens 取最大的一条')
+})
+
+test('handoffVerdict：上下文超线才算；tokenThreshold=0 时不触发', () => {
+  const meta = { calls: 10, turns: 2, lastReason: 'completed', depth: 0, parent: null, first: 0, last: 0, maxTotalTokens: 200000 }
+  assert.equal(handoffVerdict(meta, { threshold: 300, minCalls: 50 }).needed, false, '默认 0 = 关闭')
+  const v = handoffVerdict(meta, { threshold: 300, minCalls: 50, tokenThreshold: 150000 })
+  assert.equal(v.needed, true)
+  assert.match(v.reasons.join(' '), /上下文超线（200k > 150k）/)
+})
+
+test('buildHandoff：目标 / 关键文件 / 开放问题三节齐全', () => {
+  const r = {
+    cwd: 'D:/w', hours: 12,
+    repos: [{ dir: 'D:/w', dirty: true, staged: 0, modified: 1, untracked: 0, ahead: 0, behind: 0, upstream: true, files: ['src/a.ts'] }],
+    temp: [],
+    sessionInfo: { id: 'session-x', calls: 10, span: 1, last: 1, title: '修登录' },
+    handoff: { needed: false, reasons: [], exists: false },
+    must: [], glance: [], fine: [], skipped: [],
+  }
+  const text = buildHandoff(r, { now: 1792448000000, task: 't' })
+  for (const h of ['## 目标', '## 关键文件', '## 开放问题']) assert.ok(text.includes(h), `缺 ${h}`)
+  assert.ok(text.includes('修登录'), '会话标题要进「目标」')
+  assert.ok(text.includes('src/a.ts'), '未提交文件要进「关键文件」')
+})
+
+test('readRestartResult：没有 / 坏了 / 成功 三种要分开', withTmp(async (dir) => {
+  assert.equal(readRestartResult(join(dir, 'none')).found, false)
+  writeFileSync(join(dir, 'restart-result.json'), '{ broken')
+  assert.ok(readRestartResult(dir).error, '解析失败必须暴露，不能当成"没有"')
+  writeFileSync(join(dir, 'restart-result.json'), JSON.stringify({ ok: true, phase: 'relaunched', relaunchedPid: 1 }))
+  assert.equal(readRestartResult(dir).rec.ok, true)
+}))
+
+test('checkProfile：断裂时 next 给出 disabled: true 的恢复路径', withTmp(async (dir) => {
+  const p = join(dir, 'profile')
+  mkdirSync(p, { recursive: true })
+  writeFileSync(join(p, 'package.json'), JSON.stringify({
+    dependencies: { a: 'link:D:/no-such-dir' },
+    dsh: { profile: { bundles: ['a'] } },
+  }))
+  const c = checkProfile(p)
+  assert.match(c.must[0].next, /disabled: true/)
+}))

@@ -2,6 +2,51 @@
 
 版本语义：0.x 阶段允许 breaking，但**每次都写在这里**。
 
+## 0.6.0 — 2026-10-22
+
+### 加（P0 五条，来自插件市场与本机相邻插件）
+
+- **上下文占用判据**：`--token-threshold <n>` 给了才启用（默认 0 = 只显示不判）。
+  数据来自会话事件 `assistant/message.data.usage.totalTokens` 的最大值，**只读计数，不读正文**。
+  会话行会显示「上下文 280k」。实测本会话 280k / 阈值 150k 时正确触发「该交接」。
+- **上次重启结果**：`closeout app` 读 `dsh-plugin-restart/restart-result.json`。
+  `ok:true + phase:relaunched` → 不用管；其余（含 `relaunched-no-window`）→ **必须处理**，指向 `restart.log`。
+- **交接件补三节**：`--handoff` 骨架从四节变七节 —— **目标**（自动填会话标题）、
+  **关键文件**（自动填未提交清单前 10 个）、**开放问题**（留空）。
+- **启动失败恢复路径**：profile 断裂时，`next` 除 `pnpm install` 还给出
+  「在 `cordis.patch.yml` 里给坏 bundle 加 `disabled: true`，先启动再修」。
+- **skill 第 0.7 步**：超线先问一句；拒绝后触发线再涨 50% 才第二次问（拒绝冷却）。
+
+### 变更
+
+- `--report` 的判据行同步带上下文占用；交接件/报告的版本号从 v0.2 / v0.3 统一为 v0.6。
+- 测试 32 → 37（新增 token、重启结果、交接三节、恢复路径四组用例）。
+
+## 0.5.0 — 2026-10-22
+
+### 加（拆成两个子功能，同一个 CLI 两个口径）
+
+- **`closeout [session]`** —— **关本会话**的自检（默认，行为与 0.4.0 完全一致）：
+  会话元数据 → 交接判定 → 该目录的仓库 / 临时文件 / 交接件；`--handoff` / `--report` 仍在这里产出。
+- **`closeout app`** —— **关 DSH 本身**的自检：这台机器现在能不能退、退之前有什么只活在运行态里、
+  下次启动会不会起不来。查四项外部事实：
+  1. 运行中的实例（进程数与内存；只读，不杀）；
+  2. 待重启标记（`dsh-plugin-restart/pending-restart.json`，有 = 改了配置但还没生效）；
+  3. 会话库整体（最近还在写的会话 / 末尾没收口的会话）；
+  4. profile 配置完整性（bundles 是否可解析、link 目标是否存在 —— 断了就是"重启起不来"）。
+- app 口径的结论三档：`先别退出`（有必须处理项）/ `可以退出；关之前先确认 N 件事`（只有顺手看一眼）/ `可以直接退出`。
+- 新参数：`--app-name` `--profile` `--restart-dir` `--recent-minutes` `--max-sessions`。
+
+### 变更
+
+- 本机侧的门抽成 `localGates()`，session / app 两个口径共用同一套判据，不各写一份。
+- `--handoff` / `--report` 在 app 口径下不产出（那是关本会话的产物），给了会打一行说明。
+
+### 修
+
+- 桌面 profile 的内置包（`@deepseek-ai/*` 打在 app.asar 里）不再被要求出现在 profile 的 `dependencies` ——
+  否则 `closeout app` 会把它们误报成"重启后装载不了"（实测踩到：30 个 bundle 里 13 个被误报）。
+
 ## 0.4.0 — 2026-10-21
 
 ### 变更（职责澄清，不含新功能）

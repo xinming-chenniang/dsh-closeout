@@ -26,6 +26,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { realpathSync, writeFileSync } from 'node:fs'
 import { collect, conclude } from '../lib/checks.mjs'
+import { collectApp, concludeApp } from '../lib/app.mjs'
 import { TEXT, render } from '../lib/render.mjs'
 import { buildHandoff, safeName, writeHandoff } from '../lib/handoff.mjs'
 import { buildReport } from '../lib/report.mjs'
@@ -42,16 +43,25 @@ export { parsePorcelain, gitStatus, discoverRepos, listRecentFiles, collect, con
  */
 export function parseArgs(argv) {
   const o = {
+    scope: 'session',
     repos: [], temp: [], hours: 12, json: false, strict: false, zh: false, help: false,
     session: null, sessionsDir: null, handoffs: null,
     threshold: 300, minCalls: 50, days: 3,
     local: null, handoff: false, task: null, force: false, dryRun: false, cwdFromSession: false,
     cwd: null, report: false, reportOut: null,
+    recentMinutes: 15, maxSessions: 20, appName: 'DeepSeek Harness', profile: null, restartDir: null,
+    tokenThreshold: 0,
   }
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
+  let args = argv
+  // 子命令：`closeout session`（默认）/ `closeout app`。放在最前面，别的参数照旧。
+  if (args.length > 0 && (args[0] === 'session' || args[0] === 'app')) {
+    o.scope = args[0]
+    args = args.slice(1)
+  }
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]
     const next = () => {
-      const v = argv[++i]
+      const v = args[++i]
       if (v === undefined) throw new Error(`missing value for ${a}`)
       return v
     }
@@ -73,6 +83,12 @@ export function parseArgs(argv) {
     else if (a === '--cwd') o.cwd = next()
     else if (a === '--report') o.report = true
     else if (a === '--report-out') o.reportOut = next()
+    else if (a === '--recent-minutes') o.recentMinutes = Number(next())
+    else if (a === '--max-sessions') o.maxSessions = Number(next())
+    else if (a === '--app-name') o.appName = next()
+    else if (a === '--profile') o.profile = next()
+    else if (a === '--restart-dir') o.restartDir = next()
+    else if (a === '--token-threshold') o.tokenThreshold = Number(next())
     else if (a === '--json') o.json = true
     else if (a === '--strict') o.strict = true
     else if (a === '--zh' || a === '--cn') o.zh = true
@@ -83,11 +99,19 @@ export function parseArgs(argv) {
   if (!Number.isFinite(o.threshold) || o.threshold <= 0) throw new Error('--threshold must be a positive number')
   if (!Number.isFinite(o.minCalls) || o.minCalls < 0) throw new Error('--min-calls must be >= 0')
   if (!Number.isFinite(o.days) || o.days <= 0) throw new Error('--days must be a positive number')
+  if (!Number.isFinite(o.recentMinutes) || o.recentMinutes <= 0) throw new Error('--recent-minutes must be a positive number')
+  if (!Number.isFinite(o.maxSessions) || o.maxSessions <= 0) throw new Error('--max-sessions must be a positive number')
+  if (!Number.isFinite(o.tokenThreshold) || o.tokenThreshold < 0) throw new Error('--token-threshold must be >= 0')
   return o
 }
 
-const HELP = `closeout — checks you want to run before archiving or deleting an agent session.
+const HELP = `closeout — checks you want to run before archiving or deleting an agent session,
+or before closing DSH itself.
 
+  closeout [session] [options]   session self-check (default)
+  closeout app [options]         app self-check (closing the whole DSH)
+
+session options:
   --repo <dir>        repository to check (repeatable; default: cwd, or its direct children that are repos)
   --temp <dir>        directory of scratch files (repeatable; default: ./tmp when it exists)
   --hours <n>         how "recent" a scratch file must be (default: 12)
@@ -95,18 +119,28 @@ const HELP = `closeout — checks you want to run before archiving or deleting a
   --sessions-dir <d>  DSH session store (default: ~/.dsh/sessions)
   --handoffs <d>      handoff ledger to check against (default: ~/.dsh/handoffs)
   --threshold <n>     tool calls above which a handoff is expected (default: 300)
+  --token-threshold <n>  context tokens above which a handoff is expected (default: 0 = off)
   --min-calls <n>     below this a short session never needs a handoff (default: 50)
   --days <n>          a session touched within n days counts as active (default: 3)
-  --local <dir>       also run that workspace's own gates (rules-lock / hygiene-structure / rules-audit)
   --handoff           write a handoff skeleton (great with --task <name>)
   --task <name>       handoff file name segment (default: basename of cwd)
   --force             overwrite an existing handoff file
   --dry-run           print the handoff skeleton instead of writing it
   --cwd-from-session  use the session's recorded cwd as the working directory
                       (the desktop client cannot read cwd from the event window)
-  --cwd <dir>         working directory to inspect (default: cwd)
   --report            print a wrap-up report skeleton (four sections)
   --report-out <f>    write the report to this file instead of stdout
+
+app options (closing DSH itself):
+  --app-name <s>      process image to look for (default: DeepSeek Harness)
+  --profile <dir>     DSH profile to verify (default: the most recently changed one)
+  --restart-dir <d>   where dsh-plugin-restart keeps pending-restart.json
+  --recent-minutes <n> sessions written within n minutes count as live (default: 15)
+  --max-sessions <n>  how many recent sessions to decompress (default: 20)
+
+shared options:
+  --local <dir>       also run that workspace's own gates (rules-lock / hygiene-structure / rules-audit)
+  --cwd <dir>         working directory to inspect (default: cwd)
   --json              machine-readable output
   --strict            exit 1 when something must be handled
   --zh                Chinese labels
@@ -128,8 +162,14 @@ function main(argv) {
     process.exit(0)
   }
 
-  const t = opts.zh ? TEXT.zh : TEXT.en
   const cwd0 = opts.cwd ? resolve(opts.cwd) : process.cwd()
+  if (opts.scope === 'app') runApp(opts, cwd0)
+  runSession(opts, cwd0)
+}
+
+/** 关本会话的自检（默认口径）：会话元数据 + 交接判定 + 该目录的磁盘事实。 */
+function runSession(opts, cwd0) {
+  const t = opts.zh ? TEXT.zh : TEXT.en
   const r = collect(opts, cwd0)
   const v = conclude(r)
   const verdictText = v.level === 'no-delete'
@@ -184,6 +224,50 @@ function main(argv) {
   }
 
   if (opts.strict && v.level !== 'safe') process.exit(1)
+  process.exit(0)
+}
+
+/**
+ * 关闭 DSH 的自检（app 口径）：能不能退、退之前有什么只活在运行态里、下次启动会不会起不来。
+ * 只读：不杀进程、不改配置、不写文件。交接件与报告是「关本会话」的产物，这里不做。
+ */
+function runApp(opts, cwd0) {
+  const t = opts.zh ? { ...TEXT.zh, ...TEXT.app.zh } : { ...TEXT.en, ...TEXT.app.en }
+  const r = collectApp(opts, cwd0)
+  const v = concludeApp(r)
+  const verdictText = v.level === 'no-exit'
+    ? t.verdictNoExit(v.blockers)
+    : v.level === 'check-first'
+      ? t.verdictCheck(r.glance.length)
+      : t.verdictSafeExit
+
+  const payload = {
+    scope: 'app',
+    verdict: v.level,
+    verdictText,
+    cwd: r.cwd,
+    profile: r.app.profile,
+    sessions: r.app.sessions,
+    processes: r.app.processes.procs.map((p) => ({ name: p.name, pid: p.pid, memKB: p.memKB })),
+    pendingRestart: r.app.restart.pending,
+    lastRestart: r.app.restart.last,
+    must: r.must.map((m) => ({ text: m.text, next: m.next ?? null })),
+    glance: r.glance.map((m) => ({ text: m.text, next: m.next ?? null })),
+    fine: r.fine.map((m) => m.text),
+    skipped: r.skipped.map((m) => m.text),
+  }
+
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(payload, null, 2) + '\n')
+  } else {
+    process.stdout.write(render(r, t, v.level, verdictText, { color: process.stdout.isTTY === true }) + '\n')
+  }
+
+  if (opts.handoff || opts.report) {
+    process.stdout.write('\n（app 自检不出交接件/报告：那是「关本会话」产出的东西）\n')
+  }
+
+  if (opts.strict && v.level !== 'safe-exit') process.exit(1)
   process.exit(0)
 }
 

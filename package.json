@@ -1,7 +1,7 @@
 {
   "name": "dsh-closeout",
-  "version": "0.4.0",
-  "description": "Before you close an AI coding session: a verdict on whether you can archive or delete it — uncommitted work, unpushed commits, scratch files, and whether this session needs a handoff.",
+  "version": "0.6.0",
+  "description": "Before you close an AI coding session or the DSH app itself: a verdict on whether you can archive or delete it — uncommitted work, unpushed commits, scratch files, handoff, pending restarts, broken profile bundles.",
   "keywords": [
     "dsh",
     "deepseek-harness",
