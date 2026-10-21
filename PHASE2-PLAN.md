@@ -5,7 +5,7 @@
 > - `dsh-button` = **输入框按钮**（从 `dsh-closeout-button` 改名），整组按钮独立成包。
 > - `dsh-open-at-last` = **界面落点**（打开会话滚到最近一条本人发言），**不与 dsh-button 合并**。
 > - 依赖方向是**单向**：`dsh-button` 的「收口」面板 spawn `dsh-closeout` 的 CLI；`dsh-closeout` 不知道按钮存在。
-> - 本阶段**不 push、不发 npm**；tgz 足够自用，npm 最后再说。
+> - 本阶段**不发 npm**；tgz 足够自用，npm 最后再说。（push 已于 2026-10-21 做完，见 §8。）
 
 ## 1. 三个包
 
@@ -132,6 +132,8 @@ CLI 独立安装：`npm i -g dsh-closeout` 或 `npx dsh-closeout`；插件与 CL
 
 ## 8. 不做
 
-- ❌ push / npm publish（等打磨完）。
+- ~~❌ push~~ → **已 push**（2026-10-21 23:5x，`5d13f9f..1be853f`；走 Veee HTTP 代理 `127.0.0.1:15236`，
+  schannel 与 openssl 这次都握手失败，细节见 `D:\dsh\TECH.md`）。
+- ❌ npm publish（等打磨完）；`dsh-button` 仍无远端，要发 GitHub 得先建仓。
 - ❌ 三包合并（已定：独立）。
 - ❌ 删除旧 `dsh-closeout-button` 目录（改名后保留 git 历史；验证通过再决定）。
