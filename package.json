@@ -1,6 +1,6 @@
 {
   "name": "dsh-closeout",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Before you close an AI coding session: a verdict on whether you can archive or delete it — uncommitted work, unpushed commits, scratch files, and whether this session needs a handoff.",
   "keywords": [
     "dsh",

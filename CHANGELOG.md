@@ -2,6 +2,15 @@
 
 版本语义：0.x 阶段允许 breaking，但**每次都写在这里**。
 
+## 0.4.0 — 2026-10-21
+
+### 变更（职责澄清，不含新功能）
+
+- 本包**只做关会话前自检**（CLI + skill），**不含任何按钮/UI**。输入框按钮拆到独立插件 `dsh-button`
+  （原 `dsh-closeout-button` 改名）；「收口」面板由 `dsh-button` spawn 本包 CLI，未安装本包时降级提示。
+- 三个包的分工：`dsh-closeout`（自检）/ `dsh-button`（输入框按钮）/ `dsh-open-at-last-input`（会话落点）。
+  详见 `PHASE2-PLAN.md`。
+
 ## 0.3.0 — 2026-10-21
 
 ### 加

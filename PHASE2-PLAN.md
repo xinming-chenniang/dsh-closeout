@@ -1,141 +1,111 @@
-# Phase 2：把收尾做成可安装的 DSH 插件（不是"发布 npm 包"）
+# Phase 2：三个包的职责切分与改造（2026-10-21 定稿）
 
-> 2026-10-21 按用户口径修正：Phase 2 的产出物是**可安装的插件目录**。
-> `link:` / `file:` / tgz 是分发形态，**npm 注册表是最后可选项**——不是本阶段目标，也不是唯一出路。
-> 本阶段**不含 push、不含 npm 发布**；那些等插件打磨好再做。
+> **决策（用户 2026-10-21 确认）**：
+> - `dsh-closeout` = **关闭会话前自检**（CLI + skill），**不含任何按钮/UI**。
+> - `dsh-button` = **输入框按钮**（从 `dsh-closeout-button` 改名），整组按钮独立成包。
+> - `dsh-open-at-last` = **界面落点**（打开会话滚到最近一条本人发言），**不与 dsh-button 合并**。
+> - 依赖方向是**单向**：`dsh-button` 的「收口」面板 spawn `dsh-closeout` 的 CLI；`dsh-closeout` 不知道按钮存在。
+> - 本阶段**不 push、不发 npm**；tgz 足够自用，npm 最后再说。
 
-## 1. 目标
+## 1. 三个包
 
-一个 DSH 插件 bundle（npm 包格式：`package.json` + `dsh.bundle.patch` + `dsh.client`），装完得到三样：
-
-| 入口 | 形态 | 谁在用 |
-| --- | --- | --- |
-| `closeout` 命令 | CLI（现有 `bin/closeout.mjs`） | 终端、npx、CI |
-| 收尾技能 | `skills/closeout/SKILL.md` | 会话里自动触发 |
-| 输入框按钮 + 收口面板 | client 插件（现 `dsh-closeout-button`） | DSH web（含桌面端内嵌 web） |
-
-原则：**CLI 与 client 在同一个包里，运行时互不依赖**——没装 DSH 时只用 CLI；client 只在宿主里加载。
-
-## 2. 依据（本机实测，不是推断）
-
-- `dsh-closeout` v0.3.0：CLI + skill，零依赖，Node ≥ 18，23 个测试全过。
-- `dsh-closeout-button` v0.4.2：**client 插件**，README 原文「desktop profile 以 `link:D:/dsh/dsh-closeout-button` 指向它」；
-  桌面端启动成功、web boot 无失败项；`dsh.client.platform = "web"`。
-- `dsh plugin` 不是独立安装器：它把参数**转发给 profile 里的 pnpm**（`dsh plugin --help` 原文："forwarding the remaining arguments to pnpm"）。
-  所以安装来源可以是 `link:`、`file:`、tgz、npm 任意一种。
-
-## 3. 目标包结构
+| 包 | 职责 | 形态 | 内容 | 依赖 |
+| --- | --- | --- | --- | --- |
+| `dsh-closeout` | 关会话前自检（判定器） | CLI + skill | `bin/closeout.mjs`、`lib/`（checks/session/git/files/render/handoff/report）、`skills/closeout/SKILL.md` | 无（零依赖，Node ≥18） |
+| `dsh-button` | 输入框按钮 | 纯 client 插件 | 继续 / 收尾 / 按建议执行 / 重发上一条 + 「收口」面板 | 可选：`dsh-closeout`（面板用；未装则降级） |
+| `dsh-open-at-last-input` | 界面落点 | 纯 client 插件 | 打开已结束会话时滚到最近一条本人发言 | 无 |
 
 ```
-dsh-closeout/
-├── bin/closeout.mjs          # CLI（不变）
-├── lib/                      # CLI 逻辑（不变）
-├── plugin/                   # 从 dsh-closeout-button 搬来
-│   ├── index.js              # host：slot 注册 + webServer 路由
-│   ├── client.js             # web：按钮 + 面板组件
-│   └── cordis.patch.yml      # bundle patch
-├── skills/closeout/SKILL.md
-├── test/
-└── package.json
+dsh-closeout/            # 仓库（20261020-收尾流程发行版）
+├── bin/ lib/ skills/ test/
+├── README.md README.en.md CHANGELOG.md PHASE2-PLAN.md
+└── package.json         # bin + skills；dsh 字段里不声明 client
+
+dsh-button/              # 原 dsh-closeout-button（目录改名待做）
+├── lib/index.js         # host：spawn closeout、/api/dsh-closeout/check
+├── lib/client.js        # web：五个动作 + 面板
+├── cordis.patch.yml     # insert id/name = 包名
+└── test/                # host.test.mjs + client.test.mjs
+
+dsh-open-at-last-input/  # 不动
 ```
 
-```jsonc
-{
-  "name": "dsh-closeout",
-  "version": "0.4.0",
-  "bin": { "closeout": "./bin/closeout.mjs" },
-  "exports": {
-    ".": "./plugin/index.js",
-    "./client": "./plugin/client.js",
-    "./package.json": "./package.json"
-  },
-  "dsh": {
-    "engines": { "dsh": ">=0.2.0-rc.2" },
-    "bundle": { "patch": "./plugin/cordis.patch.yml" },
-    "client": { "platform": "web", "inject": [] }
-  },
-  "engines": { "node": ">=18" },
-  "peerDependencies": { "@deepseek-ai/cordis": ">=4.0.0-rc" },
-  "peerDependenciesMeta": { "@deepseek-ai/cordis": { "optional": true } },
-  "files": ["bin", "lib", "plugin", "skills", "README.md", "README.en.md", "CHANGELOG.md", "LICENSE"]
-}
-```
+## 2. 依赖与降级（dsh-button → dsh-closeout 单向）
 
-三个易漏点：
-- `engines.node` 取 **≥18**（CLI 老环境可用）；client 宿主版本由 `dsh.engines.dsh` 单独约束。
-- `exports["."]` 指向 `plugin/index.js`：作为 DSH 插件被加载走这里；普通 node import `lib/*.mjs` 不受影响。
-- `files` 必须带 `plugin/`，否则装出来的包缺 client（最容易被漏）。
+`lib/index.js` 找 `closeout` 的顺序（现有实现，保留）：
 
-## 4. 安装 / 分发形态（按顺序用，不跳级）
+1. 环境变量 `DSH_CLOSEOUT_BIN`（可指向 `.mjs`，用当前 node 跑）；
+2. PATH 里的 `closeout`（`npm link` / `npm i -g` 之后存在）；
+3. **底板**：本机 `D:\工作区\dsh-worklog` 等路径**不硬编码**；未找到时路由返回 502，
+   面板显示「未安装 dsh-closeout，只能发触发词」。
 
-| 阶段 | 形态 | 命令 | 说明 |
-| --- | --- | --- | --- |
-| 开发期 | `link:` | `dsh plugin --profile desktop add link:D:/dsh/20261020-收尾流程发行版` | 改源码即生效；与现在 button 的装法一致 |
-| 自用分发 | `file:` | `dsh plugin --profile desktop add file:../dsh-closeout` | pnpm 复制快照；改完要 remove + add |
-| 跨机/存档 | **tgz** | `dsh plugin --profile desktop add ./dsh-closeout-0.4.0.tgz` | `npm pack` 产物挂 GitHub Release 即可，**不需要 npmjs** |
-| 公开一行装 | npm registry | `dsh plugin --profile web add dsh-closeout` | **可选**，等打磨完再决定 |
+**合并后建议**：把第 2 步改成"包内 CLI"只在同仓合并时才有意义；拆包后保持"环境变量 → PATH"即可，
+不在 dsh-button 里 import closeout 的代码（避免把 CLI 逻辑拖进 client 包）。
 
-桌面端 vs Web 端：同一个包、`dsh.client.platform: "web"`；桌面端内嵌 web 运行时加载它（本机 button 已验证）。
-若将来要桌面端专属能力（托盘/原生窗口），另立 `platform: "desktop"` 的 client，不在本阶段。
+## 3. 改造清单
 
-## 5. 合并步骤
+### 3.1 dsh-closeout（v0.4.0）
+- [x] 已无按钮代码（v0.3.0 起就是纯 CLI+skill）。
+- [ ] README（中/英）：加一句"输入框按钮在 `dsh-button`，本包不装任何 UI"。
+- [ ] CHANGELOG 0.4.0：职责澄清（不是新功能）。
+- [ ] 验证：`node --test`（23 例）+ `node bin/closeout.mjs --zh --report`。
 
-### Step 1 搬家
-在 `dsh-closeout` 仓库建 `plugin/`，把 `dsh-closeout-button` 的 `lib/index.js`、`lib/client.js`、`cordis.patch.yml` 拷入；
-`cordis.patch.yml` 内指向 `./lib/index.js` 的路径同步改成 `./plugin/index.js`。
+### 3.2 dsh-button（v0.5.0，原 dsh-closeout-button）
+- [ ] `package.json`：`name` 改为 `dsh-button`，版本 0.5.0；`private` 暂时保留（未发布）。
+- [ ] `cordis.patch.yml`：`insert.id` / `name` 改为 `dsh-button`（必须等于包名，否则静默装不上）。
+- [ ] `lib/index.js`：`name` 常量与注释改为 `dsh-button`（路由 `/api/dsh-closeout` 保留——它是面板语义，不是包名）。
+- [ ] `lib/client.js`：`id`、`NAMESPACE` 改为 `dsh-button`（插槽格子 id 用 NAMESPACE 派生）。
+- [ ] `test/*.mjs`：名字引用同步。
+- [ ] README：标题改为 dsh-button；写明"面板需要 dsh-closeout（可选）"。
+- [ ] 验证：`node --test test/*.mjs`（host + client，现有 10 例）。
+- [ ] **目录改名与安装（需重启应用，单独一步）**：
+  - `Rename-Item D:\dsh\dsh-closeout-button D:\dsh\dsh-button`；
+  - profile `package.json` 的 `link:` 依赖键改名，重建 `node_modules` junction；
+  - 重启应用后跑验证矩阵；**此步在会话外确认后执行**（会断开当前 GUI）。
 
-### Step 2 host 路由复用本包 CLI
-面板现在调 `npx dsh-closeout --json --zh`。合并后改为**包内路径**：
-`node <pkg>/bin/closeout.mjs --json --zh --session <id> --cwd-from-session`。
-保留 spawn（隔离最好），不把检查逻辑 import 进 host（避免 `collect` 同步阻塞宿主事件循环，也避免与 CLI 分叉）。
+### 3.3 dsh-open-at-last-input
+- [x] 不动。
 
-### Step 3 client 文案对齐
-- 按钮：`继续` → `收尾` → `收口`（面板）→ `按建议执行` → `重发上一条`。
-- 「收尾」= 发触发词；「收口」= 打开面板显示 `closeout --zh` 三档结论（与 CLI 同名同义）。
-- 保留 v0.4.1/0.4.2 的降级：`dsh-app://` 转发失败 → 纯客户端判断；面板 20 秒超时。
+## 4. 安装 / 分发（每个包各自适用）
 
-### Step 4 本机安装验证（link:）
-`dsh plugin --profile desktop add link:D:/dsh/20261020-收尾流程发行版` → 重启应用 → 按钮出现 → 点「收口」出面板。
-
-### Step 5 验证矩阵（缺一条不算完成）
-
-| 层 | 检查 | 判据 |
+| 形态 | 命令 | 用途 |
 | --- | --- | --- |
-| CLI | `node --test test/closeout.test.mjs` | pass 23 / fail 0 |
-| CLI 报告 | `node bin/closeout.mjs --zh --report --cwd <repo>` | 四段齐全、无 undefined |
-| 插件加载 | 桌面端启动 / web boot | 无失败项；`dsh.client` 被加载 |
-| 按钮 | 输入框出现五格 | 点「收尾」填充并提交 |
-| 面板 | 点击「收口」 | `POST /api/dsh-closeout/check` 返回 JSON；超时走降级 |
-| 三端 | 家机 web GUI 实点；工作机（UOS）跑 CLI | 至少 CLI 通过 |
+| `link:` | `dsh plugin --profile desktop add link:D:/dsh/dsh-button` | 开发期（改源码即生效） |
+| `file:` | `dsh plugin --profile desktop add file:../dsh-button` | 快照 |
+| tgz | `dsh plugin --profile desktop add ./dsh-button-0.5.0.tgz` | GitHub Release 分发，不需要 npm |
+| npm | `dsh plugin --profile web add dsh-button` | 可选，打磨完再说 |
 
-### Step 6 退役旧包（验证通过后）
-`dsh-closeout-button` 目录保留、从 desktop profile 移除 `link:` 安装；在它的 README 加一行「已并入 dsh-closeout v0.4，勿再单独装」。
+CLI 独立安装：`npm i -g dsh-closeout` 或 `npx dsh-closeout`；插件与 CLI 可以不同版本。
 
-## 6. 风险与取舍
+## 5. 验证矩阵
 
-| 风险 | 说明 | 缓解 |
+| 包 | 检查 | 判据 |
 | --- | --- | --- |
-| 单包 vs 两包 | 单包一次安装全有；两包各自升级 | 推荐单包；client 只在宿主加载 |
-| engines 冲突 | CLI ≥18、client 宿主需 ≥20 | 分开声明 `engines.node` 与 `dsh.engines.dsh` |
-| client API 漂移 | slot/webServer/sessions API 随 DSH 版本变 | README 注明验证过的 DSH 版本；保留纯客户端降级 |
-| `file:` 快照 | 改源码不生效 | 开发用 `link:`，分发用 tgz |
-| 隐私 | 面板能看工作区状态 | 保持 loopback + 同源双重限制，只读 |
+| dsh-closeout | `node --test` | pass 23 / fail 0 |
+| dsh-closeout | 报告 | `--report` 四段齐全、无 undefined |
+| dsh-button | `node --test test/*.mjs` | 现有 10 例全过 |
+| dsh-button | 插件加载 | 桌面端启动 / web boot 无失败项 |
+| dsh-button | 按钮 | 五格出现；「继续」「收尾」填充并提交 |
+| dsh-button | 面板 | 装了 closeout → JSON 返回；未装 → 502 降级提示 |
+| dsh-open-at-last | 视口 | 打开已结束会话落到最近一条本人发言 |
 
-## 7. 决策点（开工前定，不超三项）
+## 6. 风险
 
-1. **单包合并**（推荐）还是两包并存？
-2. 面板调 CLI：**spawn 包内路径**（推荐）还是 import 直调？
-3. 按钮集合是否保留「继续 / 按建议执行 / 重发上一条」（不属于收尾，但与收尾同排）。
+| 风险 | 缓解 |
+| --- | --- |
+| 改名破坏安装（id/name 必须等于包名） | 三处同步改：`package.json.name`、`cordis.patch.yml`、`lib/index.js` 的 name |
+| 目录改名破坏 link: | 目录改名 + profile 依赖键 + junction 三件一起改，改完重启 |
+| 面板依赖 closeout | 未装时 502 + 面板提示，不静默 |
+| client API 漂移 | README 注明验证过的 DSH 版本；保留纯客户端降级 |
 
-## 8. 本阶段明确不做
+## 7. 回滚
 
-- ❌ push（GitHub）——等插件打磨好。
-- ❌ npm publish——同上；tgz 足够自用。
-- ❌ 删除 `dsh-closeout-button` 源码——合并验证通过、旧包退役后才动。
-- ❌ 桌面端专属 client（托盘等）——另立阶段。
+- closeout：`git reset --hard 2c19b1a`（或当前 HEAD）。
+- dsh-button：改名前提交在 `D:\dsh\dsh-closeout-button` 的 git 历史；目录改名可逆行，profile 依赖可恢复。
+- open-at-last：未动。
 
-## 9. 回滚
+## 8. 不做
 
-- 合并前打 tag 或记下 `HEAD`（当前 `2c19b1a`）。
-- 插件侧：`dsh plugin --profile desktop remove dsh-closeout` + 重新 `add link:...dsh-closeout-button`。
-- 仓库侧：`git reset --hard <HEAD>`（未推，随时可退）。
+- ❌ push / npm publish（等打磨完）。
+- ❌ 三包合并（已定：独立）。
+- ❌ 删除旧 `dsh-closeout-button` 目录（改名后保留 git 历史；验证通过再决定）。

@@ -4,6 +4,10 @@
 
 A zero-dependency CLI plus a skill (agent instructions). It answers two questions and **puts the verdict first**:
 
+> **No buttons/UI in this package** (since 2026-10-21): the composer buttons (continue / wrap-up / follow-suggestions /
+> resend + closeout panel) live in the separate plugin `dsh-button`, which spawns this CLI and degrades gracefully
+> when it is not installed.
+
 1. **Can I close this?** (archiving is reversible, deleting is not — only deletion is gated)
 2. **Does this session need a handoff note?** (length, day span, whether it ended cleanly)
 
