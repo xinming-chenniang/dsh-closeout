@@ -64,7 +64,11 @@ dsh-open-at-last-input/  # 不动
   - `node_modules`：删旧 junction、建 `dsh-button` junction（先删后建——反过来会留悬空链接）；
   - **锁两处**：profile 根 `pnpm-lock.yaml` **与** `node_modules\.pnpm\lock.yaml`（`pnpm ls` / `dsh plugin list` 读后者）；
   - 脚本内 16 条断言全 PASS；`dsh plugin --profile desktop list` 已显示 `dsh-button@link:D:/dsh/dsh-button`。
-  - [ ] **重启应用后跑运行时验证矩阵**（五格出现 / 继续·收尾填充提交 / 收口返回 JSON / `DSH_CLOSEOUT_BIN` 指错路径 → 502 降级）。
+  - [x] **重启后自动化验证**（2026-10-21 22:03 应用重启后跑 `tmp\20261021-dsh-button改名\verify-after-restart.ps1`）：
+    `POST /api/dsh-closeout/check` → **200 + `ok:true`**（closeout 13 个字段齐全，3.0 s）；返回的 `repos` 里已有
+    `D:/dsh/dsh-button` —— 说明跑的就是改名后的树。
+  - [ ] **人眼两项**：输入框左侧五个格子是否都在；点「继续」「收尾」是否真发出去。
+    （502 降级分支要另开一次带 `DSH_CLOSEOUT_BIN=Z:\nope.mjs` 的启动才验得到。）
 
 ### 3.3 dsh-open-at-last-input
 - [x] 不动。
