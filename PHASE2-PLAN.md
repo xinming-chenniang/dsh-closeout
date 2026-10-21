@@ -78,7 +78,10 @@ dsh-open-at-last-input/  # 不动
     「重发上一条：覆盖草稿并提交」「没有打开的会话：按钮禁用」）。
   - [ ] **人眼只剩一次现场点击**：真的按一下「继续」，确认消息出现在会话里。
     （未做：这一下会往正在用的会话里真实发一条消息，留给用户点，不代劳。）
-    502 降级分支要另开一次带 `DSH_CLOSEOUT_BIN=Z:\nope.mjs` 的启动才验得到（单测已覆盖该分支）。
+  - [x] **502 降级**：`node tmp\20261021-dsh-button改名\test-502-degrade.mjs` → **6/6 PASS**
+    （405 / 403 / 400 / 502 `closeout-failed` 且 message 带 ENOENT / 未设环境变量时 200 `ok:true`），
+    走 `node_modules\dsh-button` junction 加载**装好的那份代码** + 真 HTTP 往返；
+    不必再为它专门重启一次宿主（那一段由现场 200 覆盖）。
 
 ### 3.3 dsh-open-at-last-input
 - [x] 不动。
@@ -109,7 +112,7 @@ CLI 独立安装：`npm i -g dsh-closeout` 或 `npx dsh-closeout`；插件与 CL
 | dsh-button | `node --test test/*.mjs` | pass 19 / fail 0（client 11 + host 8） |
 | dsh-button | 插件加载 | 桌面端启动 / web boot 无失败项 |
 | dsh-button | 按钮 | 五格出现 ✅（截图，2026-10-21 23:4x）；「继续」「收尾」填充并提交 ✅ 单测覆盖 / ⬜ 现场点击待用户 |
-| dsh-button | 面板 | 装了 closeout → JSON 返回；未装 → 502 降级提示 |
+| dsh-button | 面板 | 装了 closeout → JSON 返回 ✅；未装 → 502 降级提示 ✅（`test-502-degrade.mjs` 6/6） |
 | dsh-open-at-last | 视口 | 打开已结束会话落到最近一条本人发言 |
 
 ## 6. 风险
