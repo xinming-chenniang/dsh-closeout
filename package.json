@@ -17,7 +17,7 @@
   "type": "module",
   "main": "./bin/closeout.mjs",
   "bin": {
-    "closeout": "./bin/closeout.mjs"
+    "closeout": "bin/closeout.mjs"
   },
   "files": [
     "bin",
