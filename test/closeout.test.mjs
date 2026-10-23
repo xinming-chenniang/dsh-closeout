@@ -258,6 +258,16 @@ test('CLI 直接跑：退出码 0，--json 是合法 JSON 且含结论字段', (
   assert.ok(Array.isArray(j.must) && Array.isArray(j.skipped))
 })
 
+test('CLI --explain：自述给出判定顺序与覆盖开关，且不依赖会话', () => {
+  const here = fileURLToPath(new URL('..', import.meta.url))
+  const out = execFileSync(process.execPath, ['bin/closeout.mjs', '--explain', '--zh'], { cwd: here, encoding: 'utf8' })
+  assert.match(out, /判定顺序/)
+  assert.match(out, /--threshold/)
+  assert.match(out, /不读对话正文/)
+  assert.match(out, /sessions-handoff\.mjs/)
+  assert.ok(!/SyntaxError/.test(out), '--explain 输出不该包含语法错误')
+})
+
 test('CLI 通过 junction / symlink 调用也能跑（invokedDirectly 不能用路径字符串比较）', () => {
   const here = fileURLToPath(new URL('..', import.meta.url))
   const dir = mkdtempSync(join(tmpdir(), 'closeout-junction-'))

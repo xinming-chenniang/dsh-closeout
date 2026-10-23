@@ -311,6 +311,10 @@ app 口径（多 `scope`，没有 repo / handoff）：
 **怎么复核这条来源链**：`git log --reverse` 的第一个提交（2026-10-20）就是 CLI + 技能 + 文章的成品；
 判据的出处在本机工作区文档里，不在本仓库历史里。第三方那层的 LICENSE 是 MIT（Copyright (c) 2026 ming）。
 
+**想看清「现在同时存在哪些同源工具、谁该说了算」→ [docs/LINEAGE.md](docs/LINEAGE.md)；
+想看「每条判据对应哪段代码、用什么命令复跑出证据」→ [docs/BEHAVIOR.md](docs/BEHAVIOR.md)。
+工具自己也能回答：`closeout --explain`（数据来源 / 判定顺序 / 每条覆盖开关）。**
+
 ## 和同类工具的区别
 
 ### DSH 生态里的相邻插件

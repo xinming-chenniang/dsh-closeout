@@ -79,6 +79,9 @@ Not built from nothing. Three layers, spelled out so this does not later get cal
    scratch files), the three-tier verdict with a gate only on **deletion**, the `closeout app` checks (pending
    restart, profile integrity, running instances), and the "judge only, never act" boundary.
 
+Run `closeout --explain` for the same answer from the tool itself (data sources, decision order, every override).
+Maps: [docs/LINEAGE.md](docs/LINEAGE.md) (which sibling tool owns which decision) · [docs/BEHAVIOR.md](docs/BEHAVIOR.md) (rule → code → reproducible command).
+
 ## Compared to similar tools
 
 | Tool | What it does | Relation |

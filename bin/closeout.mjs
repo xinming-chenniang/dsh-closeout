@@ -24,7 +24,7 @@
  */
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { realpathSync, writeFileSync } from 'node:fs'
+import { readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { collect, conclude } from '../lib/checks.mjs'
 import { collectApp, concludeApp } from '../lib/app.mjs'
 import { TEXT, render } from '../lib/render.mjs'
@@ -48,7 +48,7 @@ export function parseArgs(argv) {
     session: null, sessionsDir: null, handoffs: null,
     threshold: 300, minCalls: 50, days: 3,
     local: null, handoff: false, task: null, force: false, dryRun: false, cwdFromSession: false,
-    cwd: null, report: false, reportOut: null,
+    cwd: null, report: false, reportOut: null, explain: false,
     recentMinutes: 15, maxSessions: 20, appName: 'DeepSeek Harness', profile: null, restartDir: null,
     tokenThreshold: 0,
   }
@@ -83,6 +83,7 @@ export function parseArgs(argv) {
     else if (a === '--cwd') o.cwd = next()
     else if (a === '--report') o.report = true
     else if (a === '--report-out') o.reportOut = next()
+    else if (a === '--explain') o.explain = true
     else if (a === '--recent-minutes') o.recentMinutes = Number(next())
     else if (a === '--max-sessions') o.maxSessions = Number(next())
     else if (a === '--app-name') o.appName = next()
@@ -128,6 +129,7 @@ session options:
   --dry-run           print the handoff skeleton instead of writing it
   --cwd-from-session  use the session's recorded cwd as the working directory
                       (the desktop client cannot read cwd from the event window)
+  --explain           print how this tool decides (data sources, order, every override)
   --report            print a wrap-up report skeleton (four sections)
   --report-out <f>    write the report to this file instead of stdout
 
@@ -147,6 +149,100 @@ shared options:
   --help              this text
 `
 
+
+/* ---------------------------------------------------------------- 自述 */
+
+/** 读自己的版本号：--explain 输出的第一行要能对上 npm 上的版本。 */
+function selfVersion() {
+  try {
+    const raw = readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+    return JSON.parse(raw).version || 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/**
+ * `--explain`：把「数据从哪来、按什么顺序判、每条怎么覆盖」打成一段可复读的文本。
+ * 目的不是文档，而是**让工具回答关于它自己的问题** —— 用户不需要记住阈值和分支。
+ */
+export function explainText(opts) {
+  const v = selfVersion()
+  const tokenLine = opts.tokenThreshold > 0 ? String(opts.tokenThreshold) : '关闭（--token-threshold 开启）'
+  if (!opts.zh) {
+    return `closeout ${v} — how this works (--explain)
+
+What it is
+  A read-only judge. One run answers either "can this session be archived/deleted, and does it need a
+  handoff?" (default scope) or "can the whole DSH app be closed?" (closeout app).
+
+Where the facts come from (all read-only)
+  git    git status --porcelain; rev-list --left-right --count @{u}...HEAD
+  files  files under --temp newer than ${opts.hours}h (node_modules/.git/_trash/__pycache__/.venv/dist/build skipped)
+  session event METADATA in ~/.dsh/sessions: call count, turns, peak tokens, last turn reason,
+          first/last timestamps, depth/parent — the conversation text is never read
+  ledger ~/.dsh/handoffs: when a handoff is needed, is there a file claiming this session ('原会话：' line)
+  gates  --local <dir>: that workspace's rules-lock / root-registry / rules-audit, only if present
+
+Decision order (session scope)
+  1. any blocker (dirty repo / untracked / unpushed / new scratch files) -> "archive, but do not delete"
+  2. need a handoff?  calls > ${opts.threshold} (--threshold)
+                 or  calls >= ${opts.minCalls} and last turn not completed (--min-calls)
+                 or  goal blocked
+                 or  crossed a calendar day without closing
+                 or  context > ${tokenLine}
+  3. handoff needed but no matching file in the ledger -> "write the handoff first"
+  4. none of the above -> "safe to archive"
+  Child sessions (depth > 0 or with a parent) are never flagged; 0 calls / 0 turns never count.
+
+Every judgement has an override
+  --threshold N · --min-calls N · --token-threshold N · --hours N · --temp/--repo · --handoffs DIR
+  --local DIR · --json (machine readable) · --strict (exit 1 when something must be handled)
+
+What it deliberately never does
+  It does not commit, push, delete, restart, or edit anything (except the files you explicitly ask for
+  with --handoff / --report-out). It gives you a verdict, a list and copy-pasteable next steps.
+`
+  }
+  return `closeout ${v} —— 行为自述（--explain）
+
+它是什么
+  只读判定器。跑一次，回答两件事之一：「这个会话能不能归档 / 删除、该不该写交接件」（默认口径），
+  或者「整个 DSH 能不能退出」（closeout app）。
+
+数据从哪来（全部只读）
+  git    git status --porcelain；rev-list --left-right --count @{u}...HEAD
+  文件   --temp 里 mtime 晚于 ${opts.hours} 小时的文件（跳过 node_modules/.git/_trash/__pycache__/.venv/dist/build）
+  会话   ~/.dsh/sessions 里的**事件元数据**：调用次数、轮数、token 峰值、末尾 reason、首末时间、depth/parent
+         —— 不读对话正文
+  台账   ~/.dsh/handoffs：判定该交接时，是否已有声明本会话的交接件（认「原会话：」一行）
+  本机门 --local <dir>：该工作区的 规则锁 / 根级登记 / 规则审计，文件存在才跑
+
+判定顺序（会话口径）
+  1. 有 blocker（脏仓 / 未跟踪 / 未推 / 临时目录里刚写出来的文件）→「可以归档；先别删」
+  2. 该不该交接：calls > ${opts.threshold}（--threshold）
+              或 calls ≥ ${opts.minCalls} 且末尾未收口（--min-calls）
+              或 goal blocked
+              或 跨自然日且未收口
+              或 上下文 > ${tokenLine}
+  3. 该交接、但台账里没有对应的交接件 →「删之前先写交接件」
+  4. 都没有 →「可以归档」
+  子会话（depth > 0 或有 parent）不点名；0 调用 0 轮的不算。
+
+每条判据都能覆盖
+  --threshold N · --min-calls N · --token-threshold N · --hours N · --temp / --repo · --handoffs DIR
+  --local DIR · --json（机读）· --strict（有必须处理项时退出码 1）
+
+它故意不做什么
+  不提交、不推送、不删除、不重启、不改文件（除非你显式要 --handoff / --report-out）。
+  它给的是「结论 + 清单 + 可复跑的下一步」，不是替你执行。
+
+判据从哪来
+  阈值 300 / 50 与五条判据来自本机工作区 tools/sessions-handoff.mjs（有实测依据）；
+  交接件的流程与模板来自 shared-handoff-dsh（MIT）。详见 README「来源与借鉴」。
+`
+}
+
 /* ---------------------------------------------------------------- main */
 
 function main(argv) {
@@ -159,6 +255,10 @@ function main(argv) {
   }
   if (opts.help) {
     process.stdout.write(HELP)
+    process.exit(0)
+  }
+  if (opts.explain) {
+    process.stdout.write(explainText(opts))
     process.exit(0)
   }
 

@@ -4,13 +4,19 @@
 
 ## 未发布
 
+### 加
+
+- **`--explain`**：工具自述（数据来源 / 判定顺序 / 每条覆盖开关 / 它故意不做什么）。
+  默认值直接取自 `parseArgs`，所以改了默认值却忘了改说明会被输出暴露。
+
 ### 文档
 
+- 新增 `docs/BEHAVIOR.md`（判据 → 代码 → 复跑命令 → 期望输出）与 `docs/LINEAGE.md`
+  （5 个同源工具的职责、决策归属、冗余审计、三选一的收口方案）。
 - 补「来源与借鉴」：交接流程与模板来自 `shared-handoff-dsh`（作者 ming，MIT），
   「该不该交接」的判据来自本机 `tools/sessions-handoff.mjs`；磁盘体检、三档结论、`closeout app` 为本项目新增。
   README / README.en / ARTICLE 同步。
 - `.gitignore` 忽略 `*.tgz`（npm pack 产物；发布物以 registry 为准，本地留一份对照即可）。
-
 
 ## 0.6.0 — 2026-10-22
 
