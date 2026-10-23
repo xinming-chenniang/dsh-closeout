@@ -280,6 +280,37 @@ app 口径（多 `scope`，没有 repo / handoff）：
 共同点：**都不是代码 bug，是"关掉之前没人问一句"**。前三条工具能查（磁盘事实），第四条工具查不了 ——
 但它能替你判断"这个会话够长了、该写一份交接件了"，然后把骨架生成出来。
 
+## 来源与借鉴
+
+这个工具不是凭空长出来的。三层来源分开写清楚，免得以后被当成「全原创」：
+
+**1. 交接件的流程与模板 —— 来自第三方**
+
+- 来源：[`shared-handoff-dsh`](https://www.npmjs.com/package/shared-handoff-dsh)（作者 ming，仓库
+  [eve1329/dsh-shared-handoff](https://github.com/eve1329/dsh-shared-handoff)，MIT）里的 `handoff` 技能。
+- 借的是：证据驱动的交接、「transfer state, proof, and the next decision」，以及
+  `progress` / `session-state` / `todo` / `verification` 那套状态文件布局。
+- **没有借代码**：那个包只有插件入口与技能文档（`lib/index.js` + `skills/`），不含磁盘体检与判定逻辑；
+  本仓库零依赖、没有 vendored 代码。
+
+**2. 「该不该交接」的判据 —— 来自本机工作区**
+
+- 来源：`D:\dsh\tools\sessions-handoff.mjs`（2026-10-14 建，文件头记着实测依据）与
+  `D:\dsh\handoffs\README.md`。
+- 借的是：阈值 300 / `--min-calls` 50、末尾未收口、跨天未收口、只有 work 事件算活跃、
+  `> 已完结` 台账核对。
+- `lib/session.mjs#handoffVerdict` 是这套判据的移植，**数字没有改**。那两个本机文件不在本仓库里。
+
+**3. 本工具自己加的**
+
+- 磁盘侧体检：脏仓 / 未跟踪 / 未推 / 临时目录里刚写出来的文件；
+- 三档结论，且**只对「删除」设门槛**（归档可逆，删除不可逆）；
+- `closeout app` 口径：待重启标记、profile 完整性、运行实例；
+- 「只做判定，不执行交接 / 删除 / 提交 / 重启」的边界。
+
+**怎么复核这条来源链**：`git log --reverse` 的第一个提交（2026-10-20）就是 CLI + 技能 + 文章的成品；
+判据的出处在本机工作区文档里，不在本仓库历史里。第三方那层的 LICENSE 是 MIT（Copyright (c) 2026 ming）。
+
 ## 和同类工具的区别
 
 ### DSH 生态里的相邻插件

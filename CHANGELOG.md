@@ -2,6 +2,16 @@
 
 版本语义：0.x 阶段允许 breaking，但**每次都写在这里**。
 
+## 未发布
+
+### 文档
+
+- 补「来源与借鉴」：交接流程与模板来自 `shared-handoff-dsh`（作者 ming，MIT），
+  「该不该交接」的判据来自本机 `tools/sessions-handoff.mjs`；磁盘体检、三档结论、`closeout app` 为本项目新增。
+  README / README.en / ARTICLE 同步。
+- `.gitignore` 忽略 `*.tgz`（npm pack 产物；发布物以 registry 为准，本地留一份对照即可）。
+
+
 ## 0.6.0 — 2026-10-22
 
 ### 加（P0 五条，来自插件市场与本机相邻插件）

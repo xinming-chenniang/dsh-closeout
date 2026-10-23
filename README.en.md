@@ -61,6 +61,24 @@ The older Chinese words «收口» (check step) and «收工» (sync step) are n
 | ④ report | four-section wrap-up report | `closeout --report` |
 | ⑤ exit DSH | pending restart / unfinished sessions / profile integrity — **the other scope**, only when closing the whole app | `closeout app --zh` |
 
+## Provenance
+
+Not built from nothing. Three layers, spelled out so this does not later get called "all original":
+
+1. **Handoff flow and template — borrowed.** From the `handoff` skill in
+   [`shared-handoff-dsh`](https://www.npmjs.com/package/shared-handoff-dsh) (author ming, repo
+   [eve1329/dsh-shared-handoff](https://github.com/eve1329/dsh-shared-handoff), MIT): evidence-driven handoff,
+   "transfer state, proof, and the next decision", and the `progress` / `session-state` / `todo` /
+   `verification` state-file layout. Flow and document shape only — **no code was copied**; this repo has zero
+   dependencies and vendors nothing.
+2. **"Should this session hand off?" criteria — borrowed from the author's local DSH workspace.** From
+   `tools/sessions-handoff.mjs` and `handoffs/README.md` (2026-10-14): the 300-call threshold, `--min-calls` 50,
+   unfinished last turn, cross-day, work-events-only activity, and the handoff ledger. `lib/session.mjs#handoffVerdict`
+   is a port of those rules with the numbers unchanged.
+3. **Everything else belongs to this project**: disk-side checks (dirty / untracked / unpushed / freshly written
+   scratch files), the three-tier verdict with a gate only on **deletion**, the `closeout app` checks (pending
+   restart, profile integrity, running instances), and the "judge only, never act" boundary.
+
 ## Compared to similar tools
 
 | Tool | What it does | Relation |
