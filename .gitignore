@@ -4,3 +4,6 @@ tmp/
 .DS_Store
 Thumbs.db
 .local-posts/
+
+# npm pack 产物（发布用，可再生成；发布物以 registry 为准）
+*.tgz
