@@ -47,22 +47,24 @@
 2. **它参与判断却不解释自己**（改之前 `--help` 只列参数，不告诉你默认值从哪来、哪条判据在拦你）——本次加了 `--explain` 就是补这个；
 3. **规则同时也写在 prose 里**（AGENTS.md 的「300 次」「跑哪个脚本」），prose 与代码会各自漂移，漂移之后你会发现「工具在管我，但我不知道它在管什么」。
 
-## 5. 收口方案（三选一，未实施，等你定）
+## 5. 收口方案（A 已执行，2026-10-24）
 
-**A. 收权到 npm 包（推荐）**
-- `dsh-closeout` 做唯一判定器与唯一阈值来源；
-- `D:\dsh\tools\sessions-closeout.mjs` 改成薄封装：调 `closeout --json` + 只做它独有的 CI 红绿检查；
-- `sessions-handoff.mjs` / `sessions-length.js` 降级为「存量盘点 / 备份」用途，或退役（它们的台账消费检查可并入 closeout）；
-- `AGENTS.md` 的两个数字改成「见 `closeout --explain`」，不再复述。
+**A. 收权到 npm 包** —— 已落地：
 
-**B. 收权到本机脚本**
-- 以 `sessions-closeout.mjs` 为唯一入口（它已经声明「不另立数字」）；
-- npm 包保留为对外发布版，但本机不再直接用它判断。
-- 代价：对外版本与本机行为可能分叉，需要同步纪律。
+- `D:\dsh\tools\sessions-closeout.mjs` 第 1 项（交接判定）改为调
+  `closeout --json --zh --handoffs D:\dsh\handoffs`；阈值与五条判据不再由本机脚本计算。
+  本机独有的检查（规则锁 / 仓 / hub 页面 / tmp 窗口 / 根级 / CI 红绿）原样保留。
+- `sessions-length.js`、`sessions-handoff.mjs` 加「已降级（2026-10-24）」文件头，仅作存量盘点。
+- `D:\dsh\AGENTS.md` 收尾步骤注明「交接判定委托 dsh-closeout」。
+- `D:\dsh\handoffs\README.md` 的阈值改为指向 `closeout --explain`。
+- 备份：同目录 `*.bak-20261024-a`（`sessions-closeout.mjs` / `sessions-handoff.mjs` /
+  `sessions-length.js` / `AGENTS.md` / `handoffs\README.md` 各一份），回滚就是拷回去。
 
-**C. 只做单源声明，不改代码**
-- 每个数字/流程只保留一处，其他位置改成链接；
-- 成本最低，但 5 个实体仍在，仍要靠纪律。
+**仍未收口的重复（需要你确认，属规则变更）**：
+`C:\Users\28402\.dsh\AGENTS.md`（用户级、逐会话注入）里还有一句「单个会话超过约 300 次工具调用…」。
+按你自己定的规矩，改既有条款要先问——要不要把它改成「阈值唯一来源：`closeout --explain`」？
+
+**B / C 不再采用**：B（以本机脚本为唯一入口）会让对外版本与本机分叉；C（只做声明）解决不了「5 个实体仍在」。
 
 ## 6. 它对作者的干预点（何时会喊你）
 

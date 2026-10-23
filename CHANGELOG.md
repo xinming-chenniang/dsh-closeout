@@ -9,6 +9,12 @@
 - **`--explain`**：工具自述（数据来源 / 判定顺序 / 每条覆盖开关 / 它故意不做什么）。
   默认值直接取自 `parseArgs`，所以改了默认值却忘了改说明会被输出暴露。
 
+### 变更（收口方案 A：判据收权）
+
+- 本机 `sessions-closeout.mjs` 第 1 项改为调用本包（`--json --zh --handoffs`），不再自行计算阈值；
+  `sessions-length.js` / `sessions-handoff.mjs` 降级为存量盘点（文件头已标注）。
+- `D:\dsh\AGENTS.md` 与 `handoffs\README.md` 的阈值改为指向 `closeout --explain`；旧文件留 `*.bak-20261024-a`。
+
 ### 文档
 
 - 新增 `docs/BEHAVIOR.md`（判据 → 代码 → 复跑命令 → 期望输出）与 `docs/LINEAGE.md`
