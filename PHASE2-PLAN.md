@@ -36,7 +36,7 @@ dsh-open-at-last-input/  # 不动
 
 1. 环境变量 `DSH_CLOSEOUT_BIN`（可指向 `.mjs`，用当前 node 跑）；
 2. PATH 里的 `closeout`（`npm link` / `npm i -g` 之后存在）；
-3. **底板**：本机 `D:\工作区\dsh-worklog` 等路径**不硬编码**；未找到时路由返回 502，
+3. **底板**：本机 `D:\dsh\dsh-worklog` 等路径**不硬编码**；未找到时路由返回 502，
    面板显示「未安装 dsh-closeout，只能发触发词」。
 
 **合并后建议**：把第 2 步改成"包内 CLI"只在同仓合并时才有意义；拆包后保持"环境变量 → PATH"即可，
