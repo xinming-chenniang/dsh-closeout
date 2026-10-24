@@ -7,3 +7,6 @@ Thumbs.db
 
 # npm pack 产物（发布用，可再生成；发布物以 registry 为准）
 *.tgz
+
+# 2026-10-25：被收编的本机脚本（含绝对路径，不发布）
+legacy/
