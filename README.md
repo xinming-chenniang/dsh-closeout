@@ -33,7 +33,7 @@ $ closeout --zh
 必须处理：2
   ✗ D:\work\api → 1 已修改 / 2 未跟踪
       src/router.ts
-  ✗ D:\work\tmp → 最近 12 小时写了 12 个文件
+  ✗ D:\work\tmp → 本段会话自 2026-10-20 06:20 起（含并发会话）写了 3 个文件
       probe.ts  4 KB   [脚本]
 
 没查的（不等于没问题）：1
@@ -69,10 +69,10 @@ $ closeout app --zh
 
 | 检查 | 判据 | 落到哪 |
 |---|---|---|
-| 未提交改动 | `git status --porcelain`：XY 位拆暂存 / 修改 / 未跟踪 | 有改动 → **必须处理** |
-| 相对上游领先 / 落后 | `git rev-list --left-right --count @{u}...HEAD` | ahead → **必须处理**；behind → 顺手看一眼；**没配上游 → 没查的**（不假装同步） |
-| 临时目录里刚写出来的文件 | `mtime > now − N 小时`（默认 12），跳过 `node_modules/.git/_trash/__pycache__/.venv/dist/build/target`，按新→旧取前 12 个 | 有文件 → **必须处理** |
-| 会话长度与收口状态 | 读 DSH 会话库的**事件计数与时间**：调用数 / 跨天 / `turn/end` 的 `reason.kind` / goal blocked | 只影响「该不该交接」 |
+| 未提交改动 | `git status --porcelain`：XY 位拆暂存 / 修改 / 未跟踪；**只报本会话的工具调用里碰过的仓**（别的会话留下的 → 明说不计入） | 本会话碰过且有改动 → **必须处理** |
+| 相对上游领先 / 落后 | `git rev-list --left-right --count @{u}...HEAD`；未推提交看**提交时间**是否落在本会话 | 本会话的 ahead → **必须处理**；别人留下的 → 不计入；behind → 顺手看一眼；**没配上游 → 没查的**（不假装同步） |
+| 临时目录里本会话刚写出来的文件 | 窗口起点 = 本会话起点（**最早一条 `turn/start`**，多轮会话覆盖全部轮次）；**归属** = 本会话工具调用参数里写过的路径；跳过 `_` 前缀目录与 `node_modules/.git/_trash/__pycache__/.venv/dist/build/target`，按新→旧取前 12 个 | 本会话写的 → **必须处理**；同窗口别人写的 → 「不用管」里明说 |
+| 会话长度与收口状态 | 读 DSH 会话库的**事件计数与时间**：调用数 / 跨天（按本段）/ `turn/end` 的 `reason.kind` / goal blocked | 只影响「该不该交接」 |
 | 上下文占用 | `assistant/message` 的 `usage.totalTokens` 取最大值（只读计数，不读正文） | 给了 `--token-threshold` 且超线 → 该交接；不给只显示「上下文 280k」 |
 | 交接件是否已有 | 扫 `handoffs/*.md`，开头 15 行有「非单会话收口」的跳过，只认 `原会话：session-…` 一行 | 该写而没写 → **必须处理** |
 | 本机侧的门（可选） | `--local <工作区>`：`rules-lock.mjs` / `hygiene-structure.mjs` / `rules-audit.js`；脚本不存在 → 没查的 | 违规 / 有锁 → 顺手看一眼 |
@@ -105,14 +105,29 @@ $ closeout app --zh
 
 子会话（`delegationDepth > 0` 或有 parent）不点名；0 调用 0 轮的会话不算。
 
-### 交接件与收尾报告
+### 交接件与收尾报告（产物形态由**工作区**决定）
 
 ```bash
-closeout --zh --handoff --task 收尾工具          # 写 ~/.dsh/handoffs/<YYYYMMDD>-<任务名>.md
+closeout --zh --handoff --task 收尾工具          # 有 handoffs/ 的工作区 → 写进那个台账
 closeout --zh --handoff --task X --dry-run       # 只打印
-closeout --zh --report                           # 打印四段骨架
-closeout --zh --report --report-out 收尾报告.md   # 写盘
+closeout --zh --report                           # 只打到 stdout（默认不写盘）
+closeout --zh --report --report-out 收尾报告.md   # 要留档才写盘（相对路径按工作区根）
 ```
+
+**一个工作区只产出一份文档**（v0.7 起）：
+
+| 工作区 | 形态 | 落点 |
+|---|---|---|
+| 有 `handoffs/` | 交接件（七节 + `原会话：`） | 该台账目录 |
+| 没有 `handoffs/` | 收尾报告（六节，无 `原会话：`） | 默认 stdout；`--report-out` 才写盘 |
+
+工作区根 = 从 cwd 往上，第一处有 `handoffs/` 的目录；都没有时取最近的 `AGENTS.md` / `.git` 那层。
+所以——**在 `tmp/<任务>/` 里跑收尾，文档不会掉进那个一次性目录**（v0.6 用 cwd 解析，正是这个毛病）。
+两条路都按工作区隔开：没有本地台账时，交接件落到 `~/.dsh/handoffs/<工作区名>/`，不再把 A 项目的交接件
+倒进 B 项目的全局台账。
+
+> 为什么不再"两份都写"：四节（做了什么 / 当前状态 / 未决 / 回滚点）同源，报告独有的「结论」「收尾·同步」
+> 都能用一条命令重新打出来。写两份 = 一份要维护、一份没人读。
 
 交接件是七节：**目标 / 做了什么 / 当前状态（可复跑验证）/ 关键文件 / 未决·下一步 / 开放问题 / 回滚点**。
 工具能填的正好是「当前状态」（会话 id、次数、跨天、上下文占用、未提交的仓、临时文件清单）、
@@ -161,16 +176,16 @@ app 口径目前**没有按钮**：`dsh-button` 的面板把命令拼死成 `--j
 
 ## 收尾流程（2026-10-21 统一口径）
 
-**收尾** = ① 同步（可选）→ ② 体检 → ③ 交接（按需）→ ④ 报告 → ⑤ 退出 DSH（另一条线）。
+**收尾** = ① 同步（可选）→ ② 体检 → ③ 交接 / 报告（**按工作区形态二选一**）→ ④ 退出 DSH（另一条线）。
 旧词对照：**收口** = 体检这一步；**收工** = 同步这一步；三个词的总称统一叫「收尾」。
 
 | 步骤 | 做什么 | 入口 |
 |---|---|---|
 | ① 收尾·同步 | 改一处就 commit，push 可以攒；本工具只**探测**工作区的 `tools/dsh-sync.*` 并提示，不调用 | `tools/dsh-sync.ps1 status/push` |
 | ② 收尾·体检 | 未提交 / 未推 / tmp 新文件 / 该不该交接 | `closeout --zh` |
-| ③ 收尾·交接 | 出交接件骨架 | `closeout --handoff --task <任务名>` |
-| ④ 收尾·报告 | 四段：做了什么 / 当前状态 / 未决 / 回滚点 | `closeout --report` |
-| ⑤ 退出 DSH | 待重启 / 未收口会话 / profile 完整性 | `closeout app --zh` |
+| ③ 收尾·交接 | 有 `handoffs/` 的工作区：出交接件骨架 | `closeout --handoff --task <任务名>` |
+| ③ 收尾·报告 | 没有台账的工作区：六节报告（结论 / 做了什么 / 当前状态 / 未决 / 收尾·同步 / 回滚点） | `closeout --report [--report-out <文件>]` |
+| ④ 退出 DSH | 待重启 / 未收口会话 / profile 完整性 | `closeout app --zh` |
 
 ## 安装
 
@@ -206,13 +221,13 @@ cp /tmp/dsh-closeout/skills/closeout/SKILL.md ~/.dsh/skills/closeout/
 closeout                                  # 关本会话（默认）：当前仓库，或一级子目录里的仓库
 closeout session --zh                     # 显式写出口径（等价默认）
 closeout --repo ../api --repo ../web      # 指定仓库（可重复）
-closeout --temp ./scratch --hours 6       # 指定临时目录与"多新算新"
+closeout --temp ./scratch --hours 6       # 指定临时目录，并强制固定 6 小时窗口（默认看"本段会话起点"）
 closeout --session <id>                   # 指定会话（默认 $DSH_SESSION_ID，其次"最近写入的那个"）
 closeout --token-threshold 150000          # 上下文超 150k 也算该交接（默认 0 = 只显示不判）
 closeout --cwd D:\dsh                     # 指定要检查的工作目录
 closeout --local D:\dsh                   # 额外跑那个工作区自己的门
-closeout --handoff --task 收尾工具         # 生成交接件骨架
-closeout --report                         # 生成四段收尾报告骨架
+closeout --handoff --task 收尾工具         # 生成交接件骨架（有 handoffs/ 的工作区）
+closeout --report --report-out 结论.md    # 收尾报告（没有台账的工作区；相对路径按工作区根）
 closeout app                              # 关 DSH：运行态 / 待重启 / 会话库 / profile
 closeout app --local D:\dsh --json        # 同一套本机门，机读
 closeout app --profile <dir>              # 指定要校验的 profile（默认最近修改的那个）

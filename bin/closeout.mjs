@@ -22,14 +22,15 @@
  *
  * 退出码：0 = 跑完了（有必须处理项也返回 0）；1 = 加了 --strict 且存在必须处理项；2 = 参数错误。
  */
-import { resolve } from 'node:path'
+import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { readFileSync, realpathSync, writeFileSync, mkdirSync } from 'node:fs'
 import { collect, conclude } from '../lib/checks.mjs'
 import { collectApp, concludeApp } from '../lib/app.mjs'
 import { TEXT, render } from '../lib/render.mjs'
 import { buildHandoff, safeName, writeHandoff } from '../lib/handoff.mjs'
 import { buildReport } from '../lib/report.mjs'
+import { resolveArtifactOut } from '../lib/workspace.mjs'
 import { parsePorcelain, gitStatus, discoverRepos } from '../lib/git.mjs'
 import { listRecentFiles } from '../lib/files.mjs'
 
@@ -44,7 +45,7 @@ export { parsePorcelain, gitStatus, discoverRepos, listRecentFiles, collect, con
 export function parseArgs(argv) {
   const o = {
     scope: 'session',
-    repos: [], temp: [], hours: 12, json: false, strict: false, zh: false, help: false,
+    repos: [], temp: [], hours: 12, hoursExplicit: false, json: false, strict: false, zh: false, help: false,
     session: null, sessionsDir: null, handoffs: null,
     threshold: 300, minCalls: 50, days: 3,
     local: null, handoff: false, task: null, force: false, dryRun: false, cwdFromSession: false,
@@ -67,7 +68,7 @@ export function parseArgs(argv) {
     }
     if (a === '--repo' || a === '--repos') o.repos.push(next())
     else if (a === '--temp') o.temp.push(next())
-    else if (a === '--hours') o.hours = Number(next())
+    else if (a === '--hours') { o.hours = Number(next()); o.hoursExplicit = true }
     else if (a === '--session') o.session = next()
     else if (a === '--sessions-dir') o.sessionsDir = next()
     else if (a === '--handoffs') o.handoffs = next()
@@ -115,10 +116,12 @@ or before closing DSH itself.
 session options:
   --repo <dir>        repository to check (repeatable; default: cwd, or its direct children that are repos)
   --temp <dir>        directory of scratch files (repeatable; default: ./tmp when it exists)
-  --hours <n>         how "recent" a scratch file must be (default: 12)
+  --hours <n>         force a fixed scratch-file window in hours
+                      (default: since this session segment started — see --explain)
   --session <id>      session to inspect (default: $DSH_SESSION_ID, else the most recently written one)
   --sessions-dir <d>  DSH session store (default: ~/.dsh/sessions)
-  --handoffs <d>      handoff ledger to check against (default: ~/.dsh/handoffs)
+  --handoffs <d>      handoff ledger to check against
+                      (default: <workspace>/handoffs, else ~/.dsh/handoffs/<workspace>/)
   --threshold <n>     tool calls above which a handoff is expected (default: 300)
   --token-threshold <n>  context tokens above which a handoff is expected (default: 0 = off)
   --min-calls <n>     below this a short session never needs a handoff (default: 50)
@@ -130,8 +133,9 @@ session options:
   --cwd-from-session  use the session's recorded cwd as the working directory
                       (the desktop client cannot read cwd from the event window)
   --explain           print how this tool decides (data sources, order, every override)
-  --report            print a wrap-up report skeleton (four sections)
-  --report-out <f>    write the report to this file instead of stdout
+  --report            print a wrap-up report skeleton (stdout only)
+  --report-out <f>    write the report to this file (relative paths resolve against the
+                      workspace root, NOT the cwd)
 
 app options (closing DSH itself):
   --app-name <s>      process image to look for (default: DeepSeek Harness)
@@ -178,14 +182,19 @@ What it is
 
 Where the facts come from (all read-only)
   git    git status --porcelain; rev-list --left-right --count @{u}...HEAD
-  files  files under --temp newer than ${opts.hours}h (node_modules/.git/_trash/__pycache__/.venv/dist/build skipped)
+  files  files under --temp newer than this session segment's start; when --hours N is given,
+         newer than N hours instead (node_modules/.git/_trash/__pycache__/.venv/dist/build skipped)
   session event METADATA in ~/.dsh/sessions: call count, turns, peak tokens, last turn reason,
-          first/last timestamps, depth/parent — the conversation text is never read
-  ledger ~/.dsh/handoffs: when a handoff is needed, is there a file claiming this session ('原会话：' line)
+          first/last/segment-start timestamps, depth/parent — the conversation text is never read
+  attribution  tool/call **arguments** only (write/edit file_path, absolute paths in pwsh write
+          commands): decides which repos / scratch files belong to THIS session, so another
+          session's leftovers are listed but never counted. Message bodies are never read.
+  ledger <workspace>/handoffs (else ~/.dsh/handoffs/<workspace>/): when a handoff is needed, is there a file claiming this session ('原会话：' line)
   gates  --local <dir>: that workspace's rules-lock / root-registry / rules-audit, only if present
 
 Decision order (session scope)
-  1. any blocker (dirty repo / untracked / unpushed / new scratch files) -> "archive, but do not delete"
+  1. any blocker touched by THIS session (dirty repo / untracked / unpushed / new scratch files)
+     -> "archive, but do not delete"
   2. need a handoff?  calls > ${opts.threshold} (--threshold)
                  or  calls >= ${opts.minCalls} and last turn not completed (--min-calls)
                  or  goal blocked
@@ -198,6 +207,16 @@ Decision order (session scope)
 Every judgement has an override
   --threshold N · --min-calls N · --token-threshold N · --hours N · --temp/--repo · --handoffs DIR
   --local DIR · --json (machine readable) · --strict (exit 1 when something must be handled)
+
+Where the artifacts go (workspace contract)
+  A workspace root is the first directory up from cwd that has handoffs/; when no directory on the way
+  up has one, it is the nearest directory with AGENTS.md or .git.
+    has handoffs/   -> the artifact is a HANDOFF (7 sections + an '原会话：' line); written into that ledger
+    no  handoffs/   -> the artifact is a REPORT (6 sections, no '原会话：' line); stdout only unless --report-out
+  One workspace yields one artifact, so "a skill that produces two documents" does not happen.
+  --report-out resolves against the workspace root, never the cwd (v0.6 used the cwd: a report written
+  while standing in tmp/<task>/ landed in a scratch directory nobody reads).
+  --handoff / --report stay explicit overrides; with neither, this tool writes no file.
 
 What it deliberately never does
   It does not commit, push, delete, restart, or edit anything (except the files you explicitly ask for
@@ -212,14 +231,18 @@ What it deliberately never does
 
 数据从哪来（全部只读）
   git    git status --porcelain；rev-list --left-right --count @{u}...HEAD
-  文件   --temp 里 mtime 晚于 ${opts.hours} 小时的文件（跳过 node_modules/.git/_trash/__pycache__/.venv/dist/build）
-  会话   ~/.dsh/sessions 里的**事件元数据**：调用次数、轮数、token 峰值、末尾 reason、首末时间、depth/parent
+  文件   --temp 里写于「本会话起点」之后的文件；显式给 --hours N 时改为 N 小时内
+         （跳过 node_modules/.git/_trash/__pycache__/.venv/dist/build）
+         本会话起点 = 最早一条 turn/start（多轮会话覆盖全部轮次；没有则退到 end-seed / 创建时间）
+  会话   ~/.dsh/sessions 里的**事件元数据**：调用次数、轮数、token 峰值、末尾 reason、首末/本段起点时间、depth/parent
          —— 不读对话正文
-  台账   ~/.dsh/handoffs：判定该交接时，是否已有声明本会话的交接件（认「原会话：」一行）
+  归属   只读 tool/call 的**参数**（write/edit 的 file_path、pwsh 写命令里的绝对路径）：
+         判断哪些仓 / 临时文件是**这个会话**弄的；别的会话留下的照实列出但不计入 —— 正文不读
+  台账   <工作区>/handoffs（没有则 ~/.dsh/handoffs/<工作区名>/）：判定该交接时，是否已有声明本会话的交接件（认「原会话：」一行）
   本机门 --local <dir>：该工作区的 规则锁 / 根级登记 / 规则审计，文件存在才跑
 
 判定顺序（会话口径）
-  1. 有 blocker（脏仓 / 未跟踪 / 未推 / 临时目录里刚写出来的文件）→「可以归档；先别删」
+  1. 有**本会话碰过**的 blocker（脏仓 / 未跟踪 / 未推 / 临时目录里刚写出来的文件）→「可以归档；先别删」
   2. 该不该交接：calls > ${opts.threshold}（--threshold）
               或 calls ≥ ${opts.minCalls} 且末尾未收口（--min-calls）
               或 goal blocked
@@ -232,6 +255,15 @@ What it deliberately never does
 每条判据都能覆盖
   --threshold N · --min-calls N · --token-threshold N · --hours N · --temp / --repo · --handoffs DIR
   --local DIR · --json（机读）· --strict（有必须处理项时退出码 1）
+
+产物落在哪（工作区契约）
+  工作区根 = 从 cwd 往上，第一处有 handoffs/ 的目录；没有就取最近的 AGENTS.md / .git 那层。
+    有 handoffs/  → 产物形态是**交接件**（七节 + 「原会话：」行），写进那个台账
+    没有          → 产物形态是**收尾报告**（六节，无「原会话：」行），默认只打到 stdout，--report-out 才写盘
+  一个工作区只产出一份 —— 所以「一个技能产出两份文档」不会发生。
+  --report-out 的相对路径解析到**工作区根**，不是 cwd（v0.6 用 cwd：在 tmp/<任务>/ 里收尾，
+  报告就落进那个没人读的一次性目录）。
+  --handoff / --report 仍是显式覆盖；两个都不给，本工具不写任何文件。
 
 它故意不做什么
   不提交、不推送、不删除、不重启、不改文件（除非你显式要 --handoff / --report-out）。
@@ -288,6 +320,7 @@ function runSession(opts, cwd0) {
     session: r.session,
     sessionInfo: r.sessionInfo,
     handoff: { needed: r.handoff.needed, reasons: r.handoff.reasons, exists: r.handoff.exists, dir: r.handoff.dir },
+    workspace: r.workspace,
     must: r.must.map((m) => ({ text: m.text, next: m.next ?? null })),
     glance: r.glance.map((m) => ({ text: m.text, next: m.next ?? null })),
     fine: r.fine.map((m) => m.text),
@@ -305,19 +338,41 @@ function runSession(opts, cwd0) {
     if (opts.dryRun) {
       process.stdout.write(`\n===== 交接件骨架（--dry-run，未写盘）=====\n\n${text}\n`)
     } else {
-      const w = writeHandoff(r.handoff.dir, text, { task: opts.task ? safeName(opts.task) : undefined, force: opts.force })
+      const w = writeHandoff(r.handoff.dir, text, {
+        task: opts.task ? safeName(opts.task) : undefined,
+        force: opts.force,
+        workspaceRoot: r.workspace?.root,
+      })
       if (w.written) process.stdout.write(`\n已写交接件：${w.path}\n`)
       else if (w.reason === 'exists') process.stdout.write(`\n交接件已存在，未覆盖（要覆盖加 --force）：${w.path}\n`)
       else process.stdout.write(`\n交接件写失败：${w.reason}（${w.path}）\n`)
+      // 形态提示：工作区没有台账时，交接件落在全局工作区分目录里 —— 那是给"确实要交接"用的，
+      // 只想要一份结论存进项目，报告才是对的形态。
+      if (r.workspace && r.workspace.shape === 'report') {
+        process.stdout.write(`（本工作区没有 handoffs/ 台账，交接件写进了全局工作区分目录；只留一份结论请用 --report --report-out <文件>）\n`)
+      }
     }
   }
 
   if (opts.report) {
     const text = buildReport(r, v, { task: opts.task ? safeName(opts.task) : undefined })
     if (opts.reportOut) {
-      const out = resolve(cwd0, opts.reportOut)
-      writeFileSync(out, text)
-      process.stdout.write(`\n已写收尾报告：${out}\n`)
+      // v0.7：相对路径解析到**工作区根**。v0.6 解析到 cwd —— 在 tmp\<任务>\ 里收尾时，
+      // 报告就落进那个一次性目录，然后既没人引用、也不会被 tmp 清扫带走。
+      const out = resolveArtifactOut(opts.reportOut, { workspaceRoot: r.workspace?.root ?? cwd0 })
+      try {
+        // 落点可能在工作区根下一个还不存在的子目录（如 docs/）—— v0.6 直接 writeFileSync 会抛栈，
+        // 而这正是"验证没跑完"的典型：写失败还留着一条成功的错觉。这里建父目录，失败也明说。
+        mkdirSync(dirname(out), { recursive: true })
+        writeFileSync(out, text)
+        process.stdout.write(`\n已写收尾报告：${out}\n`)
+      } catch (e) {
+        process.stdout.write(`\n收尾报告写失败：${e && e.message ? e.message : e}（${out}）\n`)
+        process.exitCode = 1
+      }
+      if (r.workspace && r.workspace.shape === 'handoff') {
+        process.stdout.write(`（本工作区有交接件台账 ${r.handoff.dir} —— 交接件才是该产出的形态，报告不参与台账；确需留结论再保留这个文件）\n`)
+      }
     } else {
       process.stdout.write(`\n===== 收尾报告（--report，未写盘）=====\n\n${text}`)
     }

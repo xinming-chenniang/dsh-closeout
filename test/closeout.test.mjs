@@ -12,19 +12,20 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync, symlinkSync, rmdirSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 import { parseArgs } from '../bin/closeout.mjs'
 import { parsePorcelain } from '../lib/git.mjs'
-import { listRecentFiles } from '../lib/files.mjs'
+import { countRecentFiles, listRecentFiles } from '../lib/files.mjs'
 import { parseSessionLines, handoffVerdict, daysSpan, readHandoffs } from '../lib/session.mjs'
-import { collect, conclude, sameTree, localGates } from '../lib/checks.mjs'
+import { collect, conclude, sameTree, localGates, touchedBySession } from '../lib/checks.mjs'
 import { checkProfile, concludeApp, parseMem, readPendingRestart, readRestartResult, scanSessions } from '../lib/app.mjs'
 import { render, TEXT } from '../lib/render.mjs'
 import { buildHandoff, writeHandoff, stampOf, safeName } from '../lib/handoff.mjs'
 import { buildReport, findSyncScript } from '../lib/report.mjs'
+import { decideShape, findWorkspaceRoot, resolveArtifactOut, resolveLedgerDir, writeLedgerStamp } from '../lib/workspace.mjs'
 
 const HOUR = 3600e3
 
@@ -54,8 +55,15 @@ test('parsePorcelain：暂存 / 修改 / 未跟踪 分开数', () => {
 })
 
 test('parsePorcelain：空输入不炸', () => {
-  assert.deepEqual(parsePorcelain(''), { staged: 0, modified: 0, untracked: 0, files: [] })
-  assert.deepEqual(parsePorcelain(undefined), { staged: 0, modified: 0, untracked: 0, files: [] })
+  assert.deepEqual(parsePorcelain(''), { staged: 0, modified: 0, untracked: 0, files: [], paths: [] })
+  assert.deepEqual(parsePorcelain(undefined), { staged: 0, modified: 0, untracked: 0, files: [], paths: [] })
+})
+
+test('parsePorcelain：files 只留 20 个（展示用），paths 是全量（归属判定用）', () => {
+  const text = Array.from({ length: 30 }, (_, i) => `?? f${String(i).padStart(2, '0')}.txt`).join('\n')
+  const r = parsePorcelain(text)
+  assert.equal(r.files.length, 20)
+  assert.equal(r.paths.length, 30, '全量路径不能截到 20 —— 本会话改的文件可能排在第 21 个')
 })
 
 /* ---------------------------------------------------------------- files */
@@ -89,6 +97,14 @@ test('listRecentFiles：返回**最新**的 N 个，而不是目录遍历序的�
   assert.deepEqual(hits.map((h) => h.path.split(/[\\/]/).pop()), ['a19.txt', 'a18.txt', 'a17.txt'])
 }))
 
+test('countRecentFiles：数的是**总数**，不被「明细只列最新 N 个」截断', withTmp(async (dir) => {
+  // 这条钉的是 2026-10-25 的假精确：`listRecentFiles(dir, since)` 默认只回 12 个，
+  // 拿它的 length 当计数会把 20 个说成 12 个 —— 用户会照这个数决定要不要处理。
+  for (let i = 0; i < 20; i++) writeFileSync(join(dir, `f${String(i).padStart(2, '0')}.txt`), String(i))
+  assert.equal(listRecentFiles(dir, 0).length, 12, '明细默认还是只列 12 个')
+  assert.equal(countRecentFiles(dir, 0), 20, '计数必须是真实总数')
+}))
+
 /* ------------------------------------------------------------ 会话元数据 */
 
 test('parseSessionLines：调用数 / 跨天 / 结束原因 / 子会话标记', () => {
@@ -106,6 +122,77 @@ test('parseSessionLines：调用数 / 跨天 / 结束原因 / 子会话标记', 
   assert.equal(m.lastReason, 'error', 'turn/end 的 data.reason.kind 要能被读到')
   assert.equal(m.depth, 0)
 })
+
+test('parseSessionLines：segStart 取「最早一条 turn/start」，多轮会话覆盖全部轮次', () => {
+  // 2026-10-26 实测：5 轮的会话只有 2 条 end-seed（会话中断时才写），
+  // 取「最后 seed 之后」会把前面几轮漏掉 —— 那一轮里本会话写的文件就不报了。
+  const T0 = 1_000_000_000_000
+  const lines = [
+    JSON.stringify({ type: 'session', id: 'session-bbbbbbbb-cccc-dddd-eeee-ffffffffffff', createdAt: T0, cwd: 'D:\\x', delegationDepth: 0 }),
+    ev('user/message', T0 + 96 * HOUR), // 4 天后：第一轮
+    ev('turn/start', T0 + 96 * HOUR),
+    ev('tool/call', T0 + 96 * HOUR + 60e3),
+    ev('turn/end', T0 + 96 * HOUR + 120e3, { reason: { kind: 'completed' } }),
+    ev('session/end-seed', T0 + 97 * HOUR), // 会话中断
+    ev('user/message', T0 + 101 * HOUR), // 第二轮
+    ev('turn/start', T0 + 101 * HOUR),
+    ev('tool/call', T0 + 101 * HOUR + 60e3),
+  ]
+  const m = parseSessionLines(lines)
+  assert.equal(m.first, T0, 'first 仍是创建时间（有别的用途，别动它）')
+  assert.equal(m.lastSeed, T0 + 97 * HOUR)
+  assert.equal(m.segStart, T0 + 96 * HOUR, '本会话起点 = 最早一轮的开始，不是最后一段')
+})
+
+test('parseSessionLines：没有 turn/start 时 segStart 退回 lastSeed → first', () => {
+  const T0 = 1_700_000_000_000
+  // 只有 end-seed 的会话（被中断、还没开始新一轮）
+  const seeded = [
+    JSON.stringify({ type: 'session', id: 'session-cccccccc-dddd-eeee-ffff-000000000000', createdAt: T0 }),
+    ev('session/end-seed', T0 + 5e3),
+  ]
+  assert.equal(parseSessionLines(seeded).segStart, T0 + 5e3)
+  // 什么都没有时退回 first
+  const bare = [JSON.stringify({ type: 'session', id: 'session-cccccccc-dddd-eeee-ffff-000000000000', createdAt: T0 })]
+  assert.equal(parseSessionLines(bare).segStart, T0)
+})
+
+test('handoffVerdict：跨天看的是「本段」，不是会话文件活了多少天', () => {
+  const day = new Date()
+  day.setHours(9, 0, 0, 0)
+  const base = day.getTime()
+  // 4 天前创建、今天这一段没跨天、末尾也不是未收口的会话
+  const resumed = { calls: 80, turns: 3, first: base - 4 * 864e5, segStart: base, last: base + 3 * HOUR, lastReason: null, depth: 0, parent: null }
+  assert.deepEqual(handoffVerdict(resumed, { threshold: 300, minCalls: 50 }).reasons, [], '本段同一天：不该因为「文件活了 4 天」要求交接')
+  // 没有 segStart 时退回 first（向后兼容：旧调用方只给 first/last）
+  const legacy = { ...resumed, segStart: undefined }
+  const v = handoffVerdict(legacy, { threshold: 300, minCalls: 50 })
+  assert.equal(v.needed, true)
+  assert.match(v.reasons.join(' '), /跨天/, '退回 first 时仍按旧行为把创建日算成交叉')
+})
+
+test('parseArgs：--hours 显式给过才强制固定窗口（hoursExplicit）', () => {
+  assert.equal(parseArgs([]).hoursExplicit, false, '默认 = 用本段会话起点，不管小时数')
+  assert.equal(parseArgs(['--hours', '3']).hoursExplicit, true)
+  assert.equal(parseArgs(['--hours', '3']).hours, 3)
+})
+
+test('touchedBySession：只按时间判归属，判不出来时宁可当「是」', withTmp(async (dir) => {
+  const anchor = Date.now() - 60e3
+  const oldFile = join(dir, 'old.txt')
+  writeFileSync(oldFile, 'x')
+  const old = new Date(anchor - 2 * HOUR)
+  utimesSync(oldFile, old, old)
+  // 1) 文件都早于锚点、也没有本段的未推提交 → 不是这次会话改的
+  assert.equal(touchedBySession({ dir, paths: ['old.txt'], unpushedTimes: [] }, anchor), false)
+  // 2) 有一个文件 mtime 在锚点之后 → 是
+  writeFileSync(join(dir, 'fresh.txt'), 'y')
+  assert.equal(touchedBySession({ dir, paths: ['old.txt', 'fresh.txt'], unpushedTimes: [] }, anchor), true)
+  // 3) 未推提交的提交时间在锚点之后 → 是
+  assert.equal(touchedBySession({ dir, paths: ['old.txt'], unpushedTimes: [anchor + 1e3] }, anchor), true)
+  // 4) 改名行判不出来 → 当「是」（漏报比多报糟）
+  assert.equal(touchedBySession({ dir, paths: ['a.txt -> b.txt'], unpushedTimes: [] }, anchor), true)
+}))
 
 test('handoffVerdict：超线要交接，短会话不要，子会话不点名', () => {
   const long = { calls: 400, turns: 10, lastReason: 'completed', depth: 0, parent: null, first: 0, last: 0 }
@@ -137,6 +224,83 @@ test('readHandoffs：只认 `原会话：` 行，跳过「非单会话收口」'
   assert.equal(ledger.ids.has(id), true, 'a.md 应当认领这个会话')
   assert.equal(ledger.files.length, 2, 'b.md 被跳过、c.md 没有原会话行但也不叠加 id')
   assert.equal(ledger.files.find((f) => f.name === 'c.md').ids.length, 0, '正文里顺带提到的 id 不算')
+}))
+
+/* ------------------------------------------------------------ 工作区契约 v0.7 */
+
+test('findWorkspaceRoot：台账优先；没有台账时退回最近的 AGENTS.md / .git', withTmp(async (dir) => {
+  const ws = join(dir, 'ws')
+  const sub = join(ws, 'tmp', '20261028-task')
+  mkdirSync(sub, { recursive: true })
+  writeFileSync(join(ws, 'AGENTS.md'), '# ws')
+
+  const noLedger = findWorkspaceRoot(sub)
+  assert.equal(noLedger.root, ws, '在 tmp 子目录里跑收尾，工作区根要回到有 AGENTS.md 的那层')
+  assert.equal(noLedger.ledger, null)
+  assert.equal(decideShape(noLedger), 'report', '没有台账 → 形态是报告')
+
+  mkdirSync(join(ws, 'handoffs'))
+  const withLedger = findWorkspaceRoot(sub)
+  assert.equal(withLedger.root, ws)
+  assert.equal(withLedger.ledger, join(ws, 'handoffs'))
+  assert.equal(decideShape(withLedger), 'handoff', '有台账 → 形态是交接件')
+}))
+
+test('findWorkspaceRoot：往上没有任何标记时退回 cwd（外部用户随便一个目录）', withTmp(async (dir) => {
+  const r = findWorkspaceRoot(dir)
+  assert.equal(r.root, resolve(dir))
+  assert.equal(decideShape(r), 'report')
+}))
+
+test('resolveLedgerDir：显式 --handoffs > 工作区 handoffs/ > 全局工作区分目录', withTmp(async (dir) => {
+  const ws = join(dir, 'proj')
+  mkdirSync(ws, { recursive: true })
+
+  assert.equal(
+    resolveLedgerDir({ workspaceRoot: ws, cwd: ws, explicit: './ledger' }),
+    resolve(ws, 'ledger'),
+    '显式路径按 cwd 解析（调用者的原意），并优先于探测',
+  )
+
+  const globalOne = resolveLedgerDir({ workspaceRoot: ws, cwd: ws })
+  assert.equal(globalOne.split(/[\\/]/).pop(), 'proj', '没有本地台账时按工作区名分子目录')
+  assert.ok(!globalOne.endsWith(join('.dsh', 'handoffs')), '不能倒进全局台账根 —— 多工作区会混在一起')
+
+  mkdirSync(join(ws, 'handoffs'))
+  assert.equal(resolveLedgerDir({ workspaceRoot: ws, cwd: ws }), join(ws, 'handoffs'), '有本地台账就用它')
+}))
+
+test('writeLedgerStamp / resolveLedgerDir：同名工作区靠归属戳区分，不混目录', withTmp(async (dir) => {
+  const a = join(dir, 'one', 'workspace')
+  const b = join(dir, 'two', 'workspace')
+  mkdirSync(a, { recursive: true })
+  mkdirSync(b, { recursive: true })
+  const da = resolveLedgerDir({ workspaceRoot: a, cwd: a })
+  writeLedgerStamp(da, a)
+  assert.equal(resolveLedgerDir({ workspaceRoot: a, cwd: a }), da, '同一个工作区要稳定落回同一目录')
+  const db = resolveLedgerDir({ workspaceRoot: b, cwd: b })
+  assert.notEqual(db, da, '同名但不同路径的工作区必须分开')
+}))
+
+test('resolveArtifactOut：相对路径按工作区根解析，不是 cwd', withTmp(async (dir) => {
+  const ws = join(dir, 'ws')
+  const sub = join(ws, 'tmp', 'task')
+  mkdirSync(sub, { recursive: true })
+  // v0.6 的 bug：在 tmp\<任务>\ 里跑收尾，报告落到那个一次性目录里
+  assert.equal(resolveArtifactOut('docs/r.md', { workspaceRoot: ws }), resolve(ws, 'docs', 'r.md'))
+  assert.equal(resolveArtifactOut(resolve(dir, 'abs.md'), { workspaceRoot: ws }), resolve(dir, 'abs.md'), '绝对路径原样')
+}))
+
+test('collect：返回 workspace 与形态（有 handoffs/ 的工作区判 handoff）', withTmp(async (dir) => {
+  const ws = join(dir, 'proj')
+  const sub = join(ws, 'sub')
+  mkdirSync(sub, { recursive: true })
+  mkdirSync(join(ws, 'handoffs'))
+  const opts = parseArgs(['--sessions-dir', join(dir, 'nope'), '--repo', sub])
+  const r = collect(opts, sub)
+  assert.equal(r.workspace.root, ws)
+  assert.equal(r.workspace.shape, 'handoff')
+  assert.equal(r.handoff.dir, join(ws, 'handoffs'), '台账目录必须跟着工作区走')
 }))
 
 /* -------------------------------------------------------------- 采集与结论 */
@@ -218,7 +382,7 @@ test('buildHandoff：必须有 `原会话：` 一行（机器靠它对账）', (
 
 test('writeHandoff：默认不覆盖已有文件', withTmp(async (dir) => {
   const now = 1792448000000
-  const name = `${stampOf(now)}-${safeName('任务')}.md`
+  const name = `（进行中）${stampOf(now)}-${safeName('任务')}.md`
   writeFileSync(join(dir, name), 'old')
   const w = writeHandoff(dir, 'new', { task: '任务', now })
   assert.equal(w.written, false)
