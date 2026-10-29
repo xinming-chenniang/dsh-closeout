@@ -519,6 +519,18 @@ test('parseArgs：--cwd / --report / --report-out', () => {
   assert.equal(o.reportOut, 'r.md')
 })
 
+test('parseArgs：handoff / report 子命令等于对应的开关', () => {
+  const h = parseArgs(['handoff', '--task', 't'])
+  assert.equal(h.scope, 'session')
+  assert.equal(h.handoff, true)
+  assert.equal(h.task, 't')
+  const r = parseArgs(['report'])
+  assert.equal(r.scope, 'session')
+  assert.equal(r.report, true)
+  assert.equal(parseArgs(['app']).scope, 'app')
+  assert.equal(parseArgs([]).scope, 'session', '不给子命令时默认就是 session')
+})
+
 /* --------------------------------------------------------- app 口径（关闭 DSH） */
 
 test('parseArgs：子命令 app / session；默认仍是 session（向后兼容）', () => {

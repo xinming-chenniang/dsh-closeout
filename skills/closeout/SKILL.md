@@ -36,10 +36,14 @@ whenToUse: 用户说"收尾""结束这个任务""准备关闭这个对话""归�
 
 ```bash
 npx dsh-closeout --zh                # 中文，结论在第一行
+npx dsh-closeout handoff --zh --task <名>   # 体检 + 直接产交接件骨架
+npx dsh-closeout report --zh         # 体检 + 打印收尾报告
 npx dsh-closeout --zh --local .      # 连带本工作区自己的门（规则锁 / 根级登记 / 规则审计）
 npx dsh-closeout app --zh            # 要关的是整个 DSH 时用这个口径
 npx dsh-closeout --json              # 机读（钩子 / 脚本用）
 ```
+
+> 子命令（`handoff` / `report` / `app`）**必须放在最前面**，在 `--zh` 这类选项之前。
 
 > **工作区有自己的收尾脚本就先用它**（例如 `node tools\sessions-closeout.mjs`）：那是更完整的组合，
 > `closeout` 只是它的判据层。两者结论不冲突时以工作区脚本为准。

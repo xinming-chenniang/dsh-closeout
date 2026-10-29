@@ -54,9 +54,13 @@ export function parseArgs(argv) {
     tokenThreshold: 0,
   }
   let args = argv
-  // 子命令：`closeout session`（默认）/ `closeout app`。放在最前面，别的参数照旧。
-  if (args.length > 0 && (args[0] === 'session' || args[0] === 'app')) {
-    o.scope = args[0]
+  // 子命令：`session`（默认）/ `app` / `handoff` / `report`。放在最前面，别的参数照旧。
+  // handoff / report 是「只产产物」的入口：判定照跑（产物要用它的判据），只是不用再记开关。
+  const SUBCOMMANDS = ['session', 'app', 'handoff', 'report']
+  if (args.length > 0 && SUBCOMMANDS.includes(args[0])) {
+    o.scope = args[0] === 'app' ? 'app' : 'session'
+    if (args[0] === 'handoff') o.handoff = true
+    if (args[0] === 'report') o.report = true
     args = args.slice(1)
   }
   for (let i = 0; i < args.length; i++) {
@@ -95,6 +99,7 @@ export function parseArgs(argv) {
     else if (a === '--strict') o.strict = true
     else if (a === '--zh' || a === '--cn') o.zh = true
     else if (a === '--help' || a === '-h') o.help = true
+    else if (SUBCOMMANDS.includes(a)) throw new Error(`subcommand must come first: closeout ${a} [options]`)
     else throw new Error(`unknown argument: ${a}`)
   }
   if (!Number.isFinite(o.hours) || o.hours <= 0) throw new Error('--hours must be a positive number')
@@ -111,6 +116,8 @@ const HELP = `closeout — checks you want to run before archiving or deleting a
 or before closing DSH itself.
 
   closeout [session] [options]   session self-check (default)
+  closeout handoff [options]     session self-check + write a handoff skeleton
+  closeout report [options]      session self-check + print the wrap-up report
   closeout app [options]         app self-check (closing the whole DSH)
 
 session options:
