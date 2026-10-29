@@ -23,11 +23,17 @@
     "bin",
     "lib",
     "skills",
+    "cordis.patch.yml",
     "README.md",
     "README.en.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "engines": {
     "node": ">=18"
   },

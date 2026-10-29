@@ -1,0 +1,15 @@
+# dsh-closeout 的 DSH 插件层。
+#
+# 只做一件事：把包内 skills/ 作为独立技能根暴露给 DSH，
+# 让 `closeout` 技能随插件自动发现 —— 不再需要手工拷进 ~/.dsh/skills/closeout/
+# （两份同时存在就是两个同名技能，谁赢没有保证）。
+#
+# 技能根从**已安装的 npm 身份**解析，而不是把字符串拼到 baseUrl 上：
+# 同一套写法在 macOS / Linux / Windows 上都成立（照 shared-handoff-dsh 的 patch 层）。
+- insert:
+    - id: closeout-skill-filesystem
+      name: '@deepseek-ai/dsh-skill-filesystem'
+      config:
+        providerName: dsh-closeout
+        includeDefaultRoots: false
+        bundledSkillDir: !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-closeout/package.json')), 'skills')
