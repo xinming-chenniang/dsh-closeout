@@ -24,6 +24,7 @@ import { collect, conclude, sameTree, localGates, touchedBySession } from '../li
 import { checkProfile, concludeApp, parseMem, readPendingRestart, readRestartResult, scanSessions } from '../lib/app.mjs'
 import { render, TEXT } from '../lib/render.mjs'
 import { buildHandoff, writeHandoff, stampOf, safeName } from '../lib/handoff.mjs'
+import { redact, redactSecrets, redactPaths } from '../lib/redact.mjs'
 import { buildReport, findSyncScript } from '../lib/report.mjs'
 import { decideShape, findWorkspaceRoot, resolveArtifactOut, resolveLedgerDir, writeLedgerStamp } from '../lib/workspace.mjs'
 
@@ -499,7 +500,8 @@ test('buildReport：四段齐全，且不写「原会话：」行', withTmp(asyn
     assert.ok(text.includes(h), `缺少 ${h}`)
   }
   assert.ok(!text.includes('原会话：'), '报告不能带原会话行，否则会被 handoffs 台账当成交接件')
-  assert.ok(text.includes(dir))
+  // v0.7 起产物脱敏：`C:/Users/<name>` 会被打码，所以只断言路径末段还在
+  assert.ok(text.includes(dir.split(/[\\/]/).pop()), '报告要提到工作目录（用户名段会被打码）')
 }))
 
 test('findSyncScript：只探测 tools/dsh-sync.*，不调用', withTmp(async (dir) => {
@@ -682,3 +684,56 @@ test('checkProfile：断裂时 next 给出 disabled: true 的恢复路径', with
   const c = checkProfile(p)
   assert.match(c.must[0].next, /disabled: true/)
 }))
+
+/* ------------------------------------------------- P0：产物脱敏（v0.7 阶段 0） */
+
+test('redactSecrets：KEY=value 形态的秘密要打码', () => {
+  const out1 = redactSecrets('API_KEY=sk-abcdefghijklmnopqrstuvwx')
+  assert.ok(out1.includes('<redacted>'))
+  assert.ok(!out1.includes('abcdefghijklmnop'))
+  assert.ok(redactSecrets('password: hunter2hunter2').includes('<redacted>'))
+  assert.ok(redactSecrets('export GITHUB_TOKEN=ghp_0123456789abcdefghijABCDEFGHIJ').includes('<redacted>'))
+})
+
+test('redactSecrets：私钥块整段替换，保留起止标记', () => {
+  const pem = '-----BEGIN RSA PRIVATE KEY-----\nMIIEow\nAAAA\n-----END RSA PRIVATE KEY-----'
+  const out = redactSecrets(pem)
+  assert.ok(out.includes('<redacted>'))
+  assert.ok(!out.includes('MIIEow'))
+  assert.ok(out.startsWith('-----BEGIN PRIVATE KEY-----'))
+})
+
+test('redactSecrets：不误伤阈值与计数措辞', () => {
+  const text = '--token-threshold 150000 · 上下文 token 计数 280k · max_tokens=4096'
+  assert.equal(redactSecrets(text), text)
+})
+
+test('redactPaths：工作区内绝对路径转相对（两种斜杠都认）', () => {
+  assert.equal(redactPaths('| 仓库 D:/dsh/tmp/x |', 'D:\\dsh'), '| 仓库 ./tmp/x |')
+  assert.equal(redactPaths('| 仓库 D:\\dsh\\tmp\\x |', 'D:\\dsh'), '| 仓库 .\\tmp\\x |')
+})
+
+test('redactPaths：用户目录名要打码', () => {
+  assert.equal(redactPaths('C:/Users/28402/a.txt', ''), 'C:/Users/<user>/a.txt')
+  assert.equal(redactPaths('C:\\Users\\28402\\a.txt', ''), 'C:\\Users\\<user>\\a.txt')
+})
+
+test('redact：先路径后秘密，且幂等', () => {
+  const once = redact('D:/dsh/tmp/a token=abcdefghijklmnop', { workspaceRoot: 'D:\\dsh' })
+  assert.ok(once.includes('./tmp/a'), '工作区内路径要转相对')
+  assert.ok(once.includes('<redacted>'), '秘密要打码')
+  assert.equal(redact(once, { workspaceRoot: 'D:\\dsh' }), once, '重复调用不能再变形')
+})
+
+test('buildHandoff：带 workspaceRoot 时产物里是相对路径', () => {
+  const r = {
+    cwd: 'D:\\dsh',
+    repos: [{ dir: 'D:/dsh/tmp/x', dirty: true, staged: 0, modified: 1, untracked: 0, ahead: 0, behind: 0, upstream: null }],
+    temp: [],
+    must: [],
+    sessionInfo: null,
+  }
+  const text = buildHandoff(r, { now: 1792448000000, task: 't', workspaceRoot: 'D:\\dsh' })
+  assert.ok(!text.includes('D:/dsh/tmp/x'), '绝对路径必须转相对')
+  assert.ok(text.includes('./tmp/x'), '要留下可读的相对路径')
+})

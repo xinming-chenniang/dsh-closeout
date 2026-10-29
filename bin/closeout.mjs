@@ -334,7 +334,7 @@ function runSession(opts, cwd0) {
   }
 
   if (opts.handoff) {
-    const text = buildHandoff(r, { task: opts.task ? safeName(opts.task) : undefined })
+    const text = buildHandoff(r, { task: opts.task ? safeName(opts.task) : undefined, workspaceRoot: r.workspace?.root })
     if (opts.dryRun) {
       process.stdout.write(`\n===== 交接件骨架（--dry-run，未写盘）=====\n\n${text}\n`)
     } else {
@@ -355,7 +355,7 @@ function runSession(opts, cwd0) {
   }
 
   if (opts.report) {
-    const text = buildReport(r, v, { task: opts.task ? safeName(opts.task) : undefined })
+    const text = buildReport(r, v, { task: opts.task ? safeName(opts.task) : undefined, workspaceRoot: r.workspace?.root })
     if (opts.reportOut) {
       // v0.7：相对路径解析到**工作区根**。v0.6 解析到 cwd —— 在 tmp\<任务>\ 里收尾时，
       // 报告就落进那个一次性目录，然后既没人引用、也不会被 tmp 清扫带走。
