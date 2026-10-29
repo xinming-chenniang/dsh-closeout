@@ -23,11 +23,12 @@ closeout 0.6.0 —— 行为自述（--explain）
 
 | 判据 | 代码位置 | 复跑（在仓库根） | 期望 |
 |---|---|---|---|
-| 脏仓 / 未跟踪 / 未推 | `lib/git.mjs#gitStatus` | `git status --porcelain` 对照输出 | 修改/未跟踪分开计数 |
-| 临时目录「刚写出来」的文件 | `lib/files.mjs#listRecentFiles` | `closeout --temp . --hours 6` | 只列 mtime 在窗口内的，跳过 `node_modules` |
+| 脏仓 / 未跟踪 / 未推 | `lib/git.mjs#gitStatus` + `lib/checks.mjs#touchedByCalls` | `git status --porcelain` 对照输出；`closeout --json \| grep touchedBySession` | 修改/未跟踪分开计数；**只把本会话工具调用碰过的仓算 blocker**，其余写明「不计入」 |
+| 本会话碰过哪些路径 | `lib/session.mjs#collectCallRefs` | `closeout --json \| grep -c '"tool/call"'`（读了才能判） | 只读 `tool/call.data.arguments`；write/edit 的 file_path + pwsh 里带写 cmdlet 的绝对路径；不收 `>`（只读查询会误判） |
+| 临时目录「刚写出来」的文件 | `lib/files.mjs#listRecentFiles` + `lib/checks.mjs` 归属过滤 | `closeout --temp . --json` | 窗口 = 本会话起点（**最早一条 `turn/start`**；显式 `--hours N` 才改成固定小时窗）；归属 = 本会话工具调用写过的路径；数量是**本会话写的总数**，明细只列 12 个 |
 | 调用数超线 | `lib/session.mjs#handoffVerdict` | `closeout --json \| grep -A3 sessionInfo` | `calls > 300` 时 reasons 含「超线」 |
 | 末尾未收口 | 同上 | 同上 | `lastReason !== 'completed'` 且 calls ≥ 50 |
-| 跨自然日未收口 | 同上 | 同上 | `first/last` 不在同一本地日，且与上一条去重 |
+| 跨自然日未收口 | 同上 | 同上 | 按**本段**（`segStart`，没有则退回 `first`）与 `last` 比，不在同一本地日，且与上一条去重 |
 | 子会话不点名 | 同上 | 同上 | `depth > 0` 或 `parent` 存在时不判 |
 | 上下文超线 | 同上（默认关） | `closeout --token-threshold 150000 --json` | 只有给了阈值才出现 |
 | 交接件是否已存在 | `lib/session.mjs#readHandoffs` | `ls ~/.dsh/handoffs` | 认 `原会话：` 行；非单会话收口跳过 |
@@ -65,7 +66,7 @@ $ closeout --zh --repo . --hours 6
 | 调用数阈值 300 | `--threshold N` |
 | 「够长」下限 50 | `--min-calls N` |
 | 上下文阈值（默认关） | `--token-threshold N` |
-| 「刚写出来」时间窗 12h | `--hours N` |
+| 「刚写出来」窗口默认 = 本段会话起点 | `--hours N`（强制固定小时窗） |
 | 查哪些仓库 / 临时目录 | `--repo D --temp D`（可重复） |
 | 台账目录 | `--handoffs DIR` |
 | 额外跑工作区的门 | `--local DIR` |

@@ -115,9 +115,9 @@ and prints a re-runnable checklist.
 
 | Check | How | Why it stays valid |
 |---|---|---|
-| Uncommitted work | `git status --porcelain`, split into staged / modified / untracked | stable git plumbing |
-| Ahead / behind upstream | `git rev-list --left-right --count @{u}...HEAD` | same; with no upstream it says so instead of implying "in sync" |
-| Files written recently | `mtime > now - N hours`, skipping `node_modules` / `_trash` / `.git`, newest first | filesystem fact |
+| Uncommitted work | `git status --porcelain`, split into staged / modified / untracked; **only repos this session's own tool calls touched** (leftovers from other sessions are listed but not counted) | stable git plumbing + session attribution |
+| Ahead / behind upstream | `git rev-list --left-right --count @{u}...HEAD`; unpushed commits are attributed by **commit time** vs this session | same; with no upstream it says so instead of implying "in sync" |
+| Files this session wrote recently | window = this session's start (**earliest `turn/start`**, so every turn counts); attribution = paths written by this session's tool calls; `_`-prefixed dirs and `node_modules` / `_trash` / `.git` skipped, newest first | filesystem fact + session attribution |
 | Session length & how it ended | DSH session store: **event counts and timestamps only** (calls / day span / `turn/end` reason / goal blocked) | no parsing of message bodies |
 | Handoff already written? | the `原会话：session-...` line inside `handoffs/*.md` | machine contract |
 | Workspace gates (optional) | `--local <dir>`: `rules-lock` / `hygiene-structure` / `rules-audit` | per-workspace rules are never hardcoded |
@@ -149,7 +149,7 @@ With the skill installed, saying "wrap up" or "I'm about to close this session" 
 ```bash
 closeout                                  # close this session (default); auto-discover repos
 closeout --repo ../api --repo ../web      # explicit (repeatable)
-closeout --temp ./scratch --hours 6       # scratch dirs + recency window
+closeout --temp ./scratch --hours 6       # custom scratch dir + force a fixed 6h window
 closeout --session <id>                   # default: $DSH_SESSION_ID, else the most recent one
 closeout --token-threshold 150000          # context tokens above which a handoff is expected (default 0 = off)
 closeout --local D:\dsh                   # also run that workspace's own gates
@@ -181,7 +181,7 @@ jobs, terminals, pending approvals) cannot be read from outside, so it is report
 
 ### Handoff skeleton
 
-`closeout --handoff --task <name>` writes `~/.dsh/handoffs/<YYYYMMDD>-<name>.md` (override with `--handoffs`,
+`closeout --handoff --task <name>` writes `~/.dsh/handoffs/（进行中）<YYYYMMDD>-<name>.md` (override with `--handoffs`,
 print only with `--dry-run`). Seven sections: **goal / what was done / current state / key files / open items /
 open questions / rollback**. It fills what it already knows — session title (goal), session id, call count,
 context tokens, day span, dirty repos and their files (key files) — and leaves *what was done / open items /
