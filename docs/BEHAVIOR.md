@@ -8,7 +8,7 @@
 
 ```bash
 $ closeout --explain --zh
-closeout 0.6.0 —— 行为自述（--explain）
+closeout 0.7.0 —— 行为自述（--explain）
 
 它是什么
   只读判定器。跑一次，回答两件事之一：「这个会话能不能归档 / 删除、该不该写交接件」（默认口径），
