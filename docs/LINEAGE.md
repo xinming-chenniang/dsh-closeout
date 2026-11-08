@@ -22,7 +22,7 @@
 | `sessions-handoff.mjs`（本机） | 交接判定 + 台账消费留痕（`> 已完结`） | 300 / 50 / 未收口 / 跨天 | 与 `dsh-closeout` 的 `handoffVerdict` 同源同数字 |
 | `sessions-closeout.mjs`（本机） | **总入口**：交接判定 + 规则锁 + 脏仓 + tmp + 根级 + CI 红绿 | 声明「全部来自既有工具，不另立数字」 | git/tmp 检查与 `dsh-closeout` 重复；CI 检查是它独有 |
 | `dsh-closeout`（npm 包） | **判定器**：磁盘体检 + 三档结论 + 交接件骨架 + 报告骨架 + `app` 口径 | 300 / 50 / 未收口 / 跨天 / token | 与上面两个脚本的判据重复；`app` 口径为它独有 |
-| `handoff` 技能（第三方插件 `shared-handoff-dsh`） | 交接件的**流程与模板** | 无阈值 | 被 `handoffs/README.md` 与本包 README 引用 |
+| `handoff` 技能（第三方插件 `shared-handoff-dsh`） | 交接件的**流程与模板** | 无阈值 | 被 `handoffs/README.md` 与本包 README 引用；**本机 2026-11-09 已卸载**（见 §7） |
 
 外加两处**文档里的数字**：`D:\dsh\AGENTS.md` 第 68 行（300 次止损）与第 83 行（收尾固定跑 `sessions-closeout.mjs`）。
 → 同一个「300」现在写在 **3 个脚本 + 1 份规则文件**里。
@@ -75,3 +75,19 @@
 | 调用数 > 300 | 建议写交接件 | `--threshold N`，或改默认值 |
 | 上下文 > 阈值 | 建议写交接件 | 默认关闭，`--token-threshold` 才启用 |
 | 定时 / 后台 | **没有** | 无计划任务、无按钮钩子（10-22 已移除） |
+
+## 7. 2026-11-09：本机卸载 `shared-handoff-dsh`（决策记录）
+
+起因是用户问「`dsh-closeout` 和 `shared-handoff-dsh` 是不是重复了」。核对结论：**功能不重复，但有三处真重复**（触发词、交接件模板与状态约定、安装位），据此决定**不保留跨端共享交接**，卸载该插件。
+
+判「重复」用的不是功能清单，是**实测使用量**：全盘（`D:\dsh` / `D:\个人项目` / `D:\个人应用`）搜不到一个 `.agents/state/`、`session-tasks.json`、`process.auto.md` —— 它的宿主半要求 cwd 有 `.agents/state` 才注入（`lib/index.js` 的 `resolveTaskContext`），所以在本机**从未生效**；真正在用的只有「交接件落 `D:\dsh\handoffs\`、由 `dsh-closeout` 判定」这一套。
+
+做了三件：
+
+1. 从 desktop profile 的 `dependencies` + `bundles` 移除（`plugin_manager remove_bundle`，pnpm exit 0）；`handoff` / `task-id-bootstrap` 两个技能随之从技能目录消失。
+2. 清掉它留下的账：`~/.dsh/handoffs` 里 16 个 `workspace*` 目录（全是测试残留，戳指向 `%TEMP%`）→ `tmp\_trash\2026-11-09\handoffs-test-pollution\`；同期 v0.6 遗留的 1 份交接件与 2 份收尾报告迁入 `D:\dsh\_archive\handoffs\`（含 `reports\`）。
+3. 修根因：本包测试用例 `writeLedgerStamp` 没隔离 `homedir()`，**每跑一次 `npm test` 就往真实 `~/.dsh/handoffs` 净增 1 个目录**（只增不减）。`withTmp` 现在把 `HOME` / `USERPROFILE` 指到临时 home，并加断言钉住。生产代码零改动。
+
+影响：本机交接模板的唯一来源变成**本包 `lib/handoff.mjs` 的七节骨架 + `D:\dsh\handoffs\README.md` 的台账契约**；跨 agent（Codex / Claude）共享 `.agents/state/` 的能力本机不再有。
+
+回滚：`plugin_manager install_bundle shared-handoff-dsh@0.3.3`，或恢复 `profiles\desktop\package.json.bak-20261109-before-drop-shared-handoff` 后重装。数据类回滚见 `tmp\_trash\2026-11-09\handoffs-test-pollution\`（17 个目录）与归档区索引行。
