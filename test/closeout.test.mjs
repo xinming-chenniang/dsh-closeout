@@ -758,8 +758,8 @@ test('redactPaths：工作区内绝对路径转相对（两种斜杠都认）', 
 })
 
 test('redactPaths：用户目录名要打码', () => {
-  assert.equal(redactPaths('C:/Users/28402/a.txt', ''), 'C:/Users/<user>/a.txt')
-  assert.equal(redactPaths('C:\\Users\\28402\\a.txt', ''), 'C:\\Users\\<user>\\a.txt')
+  assert.equal(redactPaths('C:/Users/alice/a.txt', ''), 'C:/Users/<user>/a.txt')
+  assert.equal(redactPaths('C:\\Users\\alice\\a.txt', ''), 'C:\\Users\\<user>\\a.txt')
 })
 
 test('redact：先路径后秘密，且幂等', () => {

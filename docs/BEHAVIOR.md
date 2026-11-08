@@ -46,8 +46,8 @@ $ closeout --zh --repo . --hours 6
 该不该交接：! 该写：超线（416 次 > 300）
 
 必须处理：1
-  ✗ 该写交接件（超线（416 次 > 300）），C:\Users\28402\.dsh\handoffs 里没有对应文件
-      → closeout --handoff --handoffs "C:\Users\28402\.dsh\handoffs"
+  ✗ 该写交接件（超线（416 次 > 300）），C:\Users\<user>\.dsh\handoffs 里没有对应文件
+      → closeout --handoff --handoffs "C:\Users\<user>\.dsh\handoffs"
 
 不用管：1
   ✓ D:/个人项目/yiqi 干净
