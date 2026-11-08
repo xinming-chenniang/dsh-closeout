@@ -30,14 +30,38 @@ import { decideShape, findWorkspaceRoot, resolveArtifactOut, resolveLedgerDir, w
 
 const HOUR = 3600e3
 
-/** 临时目录 + 保证清理。 */
+/** 测试期间的假 home：`resolveLedgerDir` 的全局兜底读 `os.homedir()`。 */
+let testHome = undefined
+
+/** 恢复环境变量：值为 undefined 时必须 delete，赋值会变成字符串 "undefined"。 */
+function setEnv(key, value) {
+  if (value === undefined) delete process.env[key]
+  else process.env[key] = value
+}
+
+/**
+ * 临时目录 + 保证清理。
+ *
+ * 同时把 HOME / USERPROFILE 指向测试自己的临时 home：`resolveLedgerDir` 在
+ * 工作区没有本地 `handoffs/` 时会兜底到 `~/.dsh/handoffs/<工作区名>/`，不隔离
+ * 就会把假工作区目录（%TEMP%\closeout-xxxx\one\workspace）写进**真实**的用户台账
+ * —— 2026-11-09 据此清出 16 个残留目录。
+ */
 function withTmp(fn) {
   return async () => {
     const dir = mkdtempSync(join(tmpdir(), 'closeout-'))
+    testHome = mkdtempSync(join(tmpdir(), 'closeout-home-'))
+    const prev = { USERPROFILE: process.env.USERPROFILE, HOME: process.env.HOME }
+    setEnv('USERPROFILE', testHome)
+    setEnv('HOME', testHome)
     try {
       await fn(dir)
     } finally {
+      setEnv('USERPROFILE', prev.USERPROFILE)
+      setEnv('HOME', prev.HOME)
       rmSync(dir, { recursive: true, force: true })
+      rmSync(testHome, { recursive: true, force: true })
+      testHome = undefined
     }
   }
 }
@@ -266,6 +290,10 @@ test('resolveLedgerDir：显式 --handoffs > 工作区 handoffs/ > 全局工作�
   const globalOne = resolveLedgerDir({ workspaceRoot: ws, cwd: ws })
   assert.equal(globalOne.split(/[\\/]/).pop(), 'proj', '没有本地台账时按工作区名分子目录')
   assert.ok(!globalOne.endsWith(join('.dsh', 'handoffs')), '不能倒进全局台账根 —— 多工作区会混在一起')
+  assert.ok(
+    testHome !== undefined && resolve(globalOne).startsWith(resolve(testHome)),
+    `全局兜底必须落在测试自己的临时 home 里 —— 不能污染真实的 ~/.dsh/handoffs（实际落到 ${globalOne}）`,
+  )
 
   mkdirSync(join(ws, 'handoffs'))
   assert.equal(resolveLedgerDir({ workspaceRoot: ws, cwd: ws }), join(ws, 'handoffs'), '有本地台账就用它')
@@ -281,6 +309,10 @@ test('writeLedgerStamp / resolveLedgerDir：同名工作区靠归属戳区分，
   assert.equal(resolveLedgerDir({ workspaceRoot: a, cwd: a }), da, '同一个工作区要稳定落回同一目录')
   const db = resolveLedgerDir({ workspaceRoot: b, cwd: b })
   assert.notEqual(db, da, '同名但不同路径的工作区必须分开')
+  assert.ok(
+    testHome !== undefined && resolve(da).startsWith(resolve(testHome)),
+    `台账戳必须写进临时 home（实际 ${da}）—— 写到真实 ~/.dsh/handoffs 就是污染，测试结束还得人手动清`,
+  )
 }))
 
 test('resolveArtifactOut：相对路径按工作区根解析，不是 cwd', withTmp(async (dir) => {

@@ -4,6 +4,23 @@
 
 ## 未发布
 
+### 修复（2026-11-09：测试会把假工作区写进真实的 `~/.dsh/handoffs`）
+
+2026-11-09 查「dsh-closeout 与 shared-handoff-dsh 是否重复」时顺带发现：`~/.dsh/handoffs`
+根上有 **16 个** `workspace*` 目录，每个的 `.workspace` 归属戳都指向
+`%TEMP%\closeout-xxxx\one\workspace` —— 全是测试残留，不是真台账。
+
+根因：`writeLedgerStamp` 的用例（`test/closeout.test.mjs`）拿临时目录当假工作区，却没隔离
+`os.homedir()`。`resolveLedgerDir` 在工作区没有本地 `handoffs/` 时会兜底到
+`~/.dsh/handoffs/<工作区名>/`，同名不同路径还要按 `(工作区名, 工作区路径)` 哈希分目录 ——
+路径里含随机 temp 名，于是**每跑一次 `npm test` 净增 1 个目录，只增不减**。
+
+改法：`withTmp` 把 `HOME` / `USERPROFILE` 指到测试自己的临时 home（`finally` 里还原并删除），
+并加两条断言钉住「全局兜底目录与台账归属戳必须落在临时 home 里」。**生产代码零改动**。
+
+验证：`npm test` → 59 pass / 0 fail，跑前跑后 `~/.dsh/handoffs` 目录数都是 **0**。
+反例：把本次改动退回再跑 → 目录数变成 **1**（`workspace`），与当初那 16 个同源。
+
 ### 变更（2026-10-28：产物形态与落点按**工作区**决定，不再由 cwd 决定）
 
 起因：用户问「closeout 为什么把收尾报告写进 tmp，有会话回去看吗」。查下来是两件事叠在一起：
