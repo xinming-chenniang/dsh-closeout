@@ -251,6 +251,19 @@ test('readHandoffs：只认 `原会话：` 行，跳过「非单会话收口」'
   assert.equal(ledger.files.find((f) => f.name === 'c.md').ids.length, 0, '正文里顺带提到的 id 不算')
 }))
 
+test('readHandoffs：给出台账格式字段（文件名状态段 + 件首三行块）', withTmp(async (dir) => {
+  const id = 'session-22222222-3333-4444-5555-666666666666'
+  writeFileSync(join(dir, '（进行中）20261109-好件.md'), `# 好件\n\n> 状态：进行中\n> 更新：2026-11-09 23:00\n> 完成判据：x\n\n> 原会话：${id}\n`)
+  writeFileSync(join(dir, '20261109-手写件.md'), `# 手写件\n\n> 原会话：${id} · 状态：**已收口**\n`)
+  const ledger = readHandoffs(dir)
+  const good = ledger.files.find((f) => f.name.startsWith('（进行中）'))
+  const bad = ledger.files.find((f) => f.name === '20261109-手写件.md')
+  assert.equal(good.statusName, '进行中')
+  assert.deepEqual([good.hasStatusLine, good.hasUpdated, good.hasCriteria], [true, true, true])
+  assert.equal(bad.statusName, null, '文件名没状态段 → statusName 为空')
+  assert.equal(bad.hasStatusLine, false, '行内 `· 状态：` 不算状态块')
+}))
+
 /* ------------------------------------------------------------ 工作区契约 v0.7 */
 
 test('findWorkspaceRoot：台账优先；没有台账时退回最近的 AGENTS.md / .git', withTmp(async (dir) => {

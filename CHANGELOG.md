@@ -16,6 +16,8 @@
   有状态、文件名没状态段的件不再被兜底静默算成"已完成"；汇总行与逐条都会标。
 - `skills/closeout/SKILL.md`：骨架示例改成三行块（旧示例还教人写「已收口 / 卡住」）；第 3 步加**写完必须自检**
   （跑 `--status`，期望 `未标注 0` 且无 ⚠）。
+- `closeout` 体检（`lib/checks.mjs` + `readHandoffs`）：台账里**文件名缺状态段**的件进 `must`（`✗`，删会话前必须处理），
+  **件首三行块不全**的进 `glance`（`!`）；`readHandoffs` 相应返回 `statusName / hasStatusLine / hasUpdated / hasCriteria`。
 
 ## 0.7.0 — 2026-11-09
 
