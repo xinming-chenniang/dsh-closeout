@@ -413,6 +413,23 @@ test('buildHandoff：必须有 `原会话：` 一行（机器靠它对账）', (
   assert.match(text, /超线（400 次 > 300）/)
 })
 
+test('buildHandoff：件首必须有三行状态块（契约 ③；2026-11-09 补）', () => {
+  const id = 'session-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+  const r = {
+    cwd: 'D:/work/api', hours: 12, repos: [], temp: [],
+    session: { id, calls: 400 },
+    sessionInfo: { id, calls: 400, span: 2, last: Date.now() },
+    handoff: { needed: true, exists: false, reasons: [], note: null },
+    must: [], glance: [], fine: [], skipped: [],
+  }
+  const text = buildHandoff(r, { now: 1792448000000, task: '三行块' })
+  assert.match(text, /^> 状态：进行中$/m)
+  assert.match(text, /^> 更新：\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/m)
+  assert.match(text, /^> 完成判据：/m)
+  assert.match(text, /^> 原会话：session-/m)
+  assert.doesNotMatch(text, /· 状态：进行中/, '生成的文件不能只有行内状态')
+})
+
 test('writeHandoff：默认不覆盖已有文件', withTmp(async (dir) => {
   const now = 1792448000000
   const name = `（进行中）${stampOf(now)}-${safeName('任务')}.md`
