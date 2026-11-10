@@ -2,6 +2,8 @@
 
 > Run this **before** you archive or delete an AI coding session: what still lives only on disk — and does this session need a handoff?
 
+> If it helps, a ⭐ star is appreciated. Bugs and requests: [open an issue](https://github.com/xinming-chenniang/dsh-closeout/issues) or email xinming-chenniang@qq.com.
+
 A zero-dependency CLI plus a skill (agent instructions). **Two scopes, verdict first**:
 
 | Subcommand | Answers | Looks at |

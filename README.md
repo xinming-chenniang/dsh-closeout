@@ -2,6 +2,8 @@
 
 > 关掉任何东西之前先跑一遍：**哪些东西还只活在磁盘上，以及这次关闭该不该留个交接。**
 
+> 如果对您有帮助，请点个 ⭐ Star。有问题欢迎开 [Issue](https://github.com/xinming-chenniang/dsh-closeout/issues)，或者直接给我发邮件 xinming-chenniang@qq.com。
+
 一个零依赖命令行工具 + 一个技能（skill）。v0.5.0 起分成**两个口径**，先给答案再给清单：
 
 | 子命令 | 回答的问题 | 什么时候跑 |
