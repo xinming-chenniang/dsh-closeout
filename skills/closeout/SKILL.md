@@ -46,10 +46,10 @@ whenToUse: 用户说"收尾""交接件""写交接""收尾报告""关DSH""关应�
 ## 第 1 步：体检（一条命令）
 
 ```bash
-npx dsh-closeout --zh                # 中文，结论在第一行
+npx dsh-closeout --zh                # 中文，结论在第一行；cwd 有 tools/rules-audit.js 时自动带本机门
 npx dsh-closeout handoff --zh --task <名>   # 体检 + 直接产交接件骨架
 npx dsh-closeout report --zh         # 体检 + 打印收尾报告
-npx dsh-closeout --zh --local .      # 连带本工作区自己的门（规则锁 / 根级登记 / 规则审计）
+npx dsh-closeout --zh --local .      # 显式指定本机门（不写也自动；指向别的工作区时才需要）
 npx dsh-closeout app --zh            # 要关的是整个 DSH 时用这个口径
 npx dsh-closeout --json              # 机读（钩子 / 脚本用）
 ```
@@ -65,7 +65,7 @@ npx dsh-closeout --json              # 机读（钩子 / 脚本用）
 2. **临时目录**：本会话写了哪些文件（按会话自己的调用参数判归属）；同窗口别的会话写的明说个数、不计入；
 3. **交接件台账**：该交接时，`handoffs/` 里有没有声明本会话的文件（认 `原会话：` 一行）；
 4. **会话本身**：调用次数 / 上下文占用 / 跨天（按本段算）/ 末尾是否收口 / goal 是否 blocked；
-5. **本机门（可选）**：`--local <dir>` 时跑那个工作区的规则锁 / 根级登记 / 规则审计。
+5. **本机门（2026-11-12 起自动）**：cwd 里有 `tools/rules-audit.js` 就跑那个工作区的规则锁 / 根级登记 / 规则审计（`D:\dsh` 就是）；`--local <dir>` 仍可指向别的工作区。
 
 输出长这样（结论在最上面，然后是四组清单）：
 
@@ -188,7 +188,7 @@ npx dsh-closeout --handoff --task <任务名>
 node D:\dsh\plugins\dsh-closeout\legacy\sessions-handoff.mjs --status --handoffs <台账目录>
 ```
 
-期望 `未标注 0` 且**没有** `⚠ 文件名缺状态段`；有 ⚠ 就当场改名/补块再跑一次。事故经过见 `handoffs\README.md` ③。
+期望 `未标注 0` 且**没有** `⚠ 文件名缺状态段`；有 ⚠ 就当场改名/补块再跑一次。事故经过见台账目录的 `README.md` 历史记录（若该 README 已归档，去归档区找 `handoffs-README-*.md`）。
 
 ## 第 3.5 步：收尾·报告（只给**没有台账**的工作区）
 

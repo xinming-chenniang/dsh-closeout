@@ -24,7 +24,7 @@
  */
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readFileSync, realpathSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, realpathSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { collect, conclude } from '../lib/checks.mjs'
 import { collectApp, concludeApp } from '../lib/app.mjs'
 import { TEXT, render } from '../lib/render.mjs'
@@ -302,6 +302,12 @@ function main(argv) {
   }
 
   const cwd0 = opts.cwd ? resolve(opts.cwd) : process.cwd()
+  // 2026-11-12（用户批）：cwd 里有 tools/rules-audit.js 就**自动**跑本机门（规则锁 / 根级登记 / 规则审计）。
+  // 原来只有显式 --local 才跑 —— 实测结果是"D:\dsh 的规则审计基本没在收尾时跑过"，等于没有。
+  // 显式 --local 仍优先（可指向别的工作区）；app 模式不跑本机门。
+  if (!opts.local && opts.scope !== 'app' && existsSync(resolve(cwd0, 'tools', 'rules-audit.js'))) {
+    opts.local = cwd0
+  }
   if (opts.scope === 'app') runApp(opts, cwd0)
   runSession(opts, cwd0)
 }
