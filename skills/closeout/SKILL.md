@@ -135,7 +135,7 @@ npx dsh-closeout --handoff --task <任务名>
 ```
 
 > **落点不用自己拼**：工作区有 `handoffs/` 就写进去；没有就落到 `~/.dsh/handoffs/<工作区名>/`（按工作区隔开）。
-> 要写别处才加 `--handoffs <dir>`。本机 `D:\dsh` 的台账是 `D:\dsh\handoffs`；**别的台账（如 `D:\个人项目\handoffs`）跑 `--status` 必须显式 `--handoffs <dir>`**，否则只看得到 `D:\dsh` 那一份。
+> 要写别处才加 `--handoffs <dir>`。本机 `D:\dsh` 的台账是 `D:\dsh\handoffs`；**别的台账（如 `D:\开发项目\handoffs`）跑 `--status` 必须显式 `--handoffs <dir>`**，否则只看得到 `D:\dsh` 那一份。
 > 台账目录下另有 `archive/`（**不存在则创建**）= 已完结交接件的去处，见第 4 步。
 
 骨架是**七节**：`目标` / `做了什么` / `当前状态（可复跑验证）` / `关键文件` / `未决·下一步` / `开放问题` / `回滚点`。
